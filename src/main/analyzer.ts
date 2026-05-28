@@ -199,7 +199,7 @@ function analyzePerformance($: CheerioAPI, pageUrl: string, http: HttpInfo, html
     ttfbMs: http.ttfbMs,
     totalDownloadMs: http.totalDownloadMs,
     redirectTimeMs: http.redirectTimeMs,
-    numRedirects: http.redirectChain.length,
+    numRedirects: http.redirectChain.filter((h) => h.status >= 300 && h.status < 400).length,
     htmlSizeKb,
     totalPageWeightKb: htmlSizeKb,
     htmlCompressed: http.compressed,

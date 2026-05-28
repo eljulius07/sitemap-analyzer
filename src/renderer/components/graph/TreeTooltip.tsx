@@ -14,6 +14,11 @@ export function TreeTooltip({ x, y, node }: { x: number; y: number; node: TreeNo
         Status: {statusText}
         {node.isDiscovered ? '' : ' (ghost)'}
       </div>
+      {node.redirected && (
+        <div className="text-blue-300 break-all">
+          ↪ {node.redirectStatus} redirects to: {node.redirectTarget}
+        </div>
+      )}
       {node.isDiscovered && (
         <>
           <div className="text-slate-300">Health: {node.healthScore}/100</div>

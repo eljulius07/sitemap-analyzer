@@ -1,5 +1,5 @@
 appId: com.sitemapanalyzer.app
-productName: Sitemap Analyzer
+productName: Site Analyzer
 directories:
   output: release
   buildResources: build

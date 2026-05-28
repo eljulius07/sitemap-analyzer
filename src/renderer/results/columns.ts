@@ -1,5 +1,5 @@
 import { countIssues } from '@shared/scoring'
-import type { UrlResult } from '@shared/types'
+import { redirectInfo, type UrlResult } from '@shared/types'
 import type { TabId } from '../stores/analysisStore'
 
 export type CellValue = string | number | boolean | string[] | null
@@ -37,6 +37,17 @@ export const statusColumn: Column = {
   get: (r) => r.http.statusCode,
   kind: 'status',
   align: 'center'
+}
+
+export const redirectColumn: Column = {
+  id: 'redirect',
+  header: 'Redirect',
+  size: 280,
+  get: (r) => {
+    const info = redirectInfo(r.http)
+    return info ? `${info.status} → ${info.target}` : null
+  },
+  flag: (r) => (r.http.redirectChain.length > 0 ? 'warning' : null)
 }
 
 const healthColumn: Column = {
@@ -212,6 +223,7 @@ export const SPIDER_COLUMNS: Column[] = [
 
 export const OVERVIEW_COLUMNS: Column[] = [
   statusColumn,
+  redirectColumn,
   healthColumn,
   { id: 'seoScore', header: 'SEO', size: 70, align: 'center', get: (r) => r.scores.seo },
   { id: 'perfScore', header: 'Perf', size: 70, align: 'center', get: (r) => r.scores.performance },
@@ -250,6 +262,7 @@ export const TAB_LABELS: Record<TabId, string> = {
 export const ALL_COLUMNS: Column[] = [
   urlColumn,
   statusColumn,
+  redirectColumn,
   healthColumn,
   ...SEO_COLUMNS,
   ...PERF_COLUMNS,

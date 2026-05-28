@@ -2,7 +2,7 @@
   "name": "sitemap-analyzer",
   "version": "1.0.0",
   "description": "Cross-platform desktop app to crawl sitemaps and run a detailed SEO audit.",
-  "author": "Sitemap Analyzer",
+  "author": "Site Analyzer",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

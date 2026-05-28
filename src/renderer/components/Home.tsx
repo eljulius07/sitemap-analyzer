@@ -13,7 +13,7 @@ export function Home(): JSX.Element {
     <div className="flex-1 overflow-auto flex flex-col items-center p-8">
       <div className="w-full max-w-3xl flex flex-col items-center">
         <div className="text-center mb-6">
-          <h1 className="text-3xl font-bold tracking-tight">Sitemap Analyzer</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Site Analyzer</h1>
         </div>
 
         {spiderRunning ? (

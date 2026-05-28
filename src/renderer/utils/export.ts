@@ -95,7 +95,7 @@ export async function buildWorkbook(
 ): Promise<ExcelJS.Workbook> {
   const summary = computeSummary(results)
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'Sitemap Analyzer'
+  wb.creator = 'Site Analyzer'
   wb.created = new Date()
 
   // Summary sheet first.
@@ -297,7 +297,7 @@ export function generateHtmlReport(
       : ''
 
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Sitemap Analyzer Report</title>
+<html lang="en"><head><meta charset="utf-8"><title>Site Analyzer Report</title>
 <style>
   :root { color-scheme: light dark; }
   body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; background: #f8fafc; color: #0f172a; }
@@ -331,7 +331,7 @@ export function generateHtmlReport(
   @media print { details { break-inside: avoid; } summary { list-style: none; } body { margin: 0; } }
 </style></head>
 <body>
-  <h1>Sitemap Analyzer Report</h1>
+  <h1>Site Analyzer Report</h1>
   <div class="sub">Generated ${esc(new Date().toLocaleString())} · Source: ${esc(source || 'n/a')} · ${summary.total} URLs</div>
 
   <div class="cards">

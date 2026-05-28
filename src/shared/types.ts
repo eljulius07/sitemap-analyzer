@@ -59,6 +59,17 @@ export interface HttpInfo {
   headers: Record<string, string>
 }
 
+/**
+ * If the page was reached through one or more HTTP redirects, return the
+ * triggering redirect status (e.g. 301/302) and the final destination URL.
+ */
+export function redirectInfo(http: HttpInfo): { status: number; target: string } | null {
+  const chain = http.redirectChain
+  if (chain.length === 0) return null
+  const hop = chain.find((h) => h.status >= 300 && h.status < 400)
+  return { status: hop?.status ?? chain[0].status, target: chain[chain.length - 1].url }
+}
+
 export type CanonicalStatus = 'self' | 'other' | 'missing'
 
 export interface SeoAnalysis {

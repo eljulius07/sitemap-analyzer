@@ -48,7 +48,7 @@ export function graphToGexf(graph: GraphData): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <gexf xmlns="http://gexf.net/1.3" version="1.3">
   <meta lastmodifieddate="${graph.metadata.crawlDate.slice(0, 10)}">
-    <creator>Sitemap Analyzer</creator>
+    <creator>Site Analyzer</creator>
     <description>Site graph for ${esc(graph.metadata.rootUrl)}</description>
   </meta>
   <graph mode="static" defaultedgetype="directed">

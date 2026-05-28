@@ -11,7 +11,7 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 600,
     show: false,
-    title: 'Sitemap Analyzer',
+    title: 'Site Analyzer',
     backgroundColor: '#0f172a',
     autoHideMenuBar: true,
     webPreferences: {

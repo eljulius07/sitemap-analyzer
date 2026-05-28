@@ -275,7 +275,7 @@ export function SiteTree(): JSX.Element {
         .attr('stroke-width', border.width)
         .attr('stroke-dasharray', border.dashed ? '4,3' : null)
     })
-    merged.select('circle.status-dot').attr('fill', (d) => statusDotColor(d.data.status))
+    merged.select('circle.status-dot').attr('fill', (d) => (d.data.redirected ? '#3b82f6' : statusDotColor(d.data.status)))
     merged.select('rect.bar-bg').attr('width', NODE_W - 60)
     merged.select('rect.bar-fill').each(function (d) {
       const m = metric(d.data, t.colorMode, maxDepth)
@@ -284,7 +284,8 @@ export function SiteTree(): JSX.Element {
         .attr('fill', nodeColor(d.data, t.colorMode, maxDepth))
     })
     merged.select('text.label').text((d) => {
-      const raw = d.data.depth === 0 ? d.data.label : '/' + d.data.label
+      const base = d.data.depth === 0 ? d.data.label : '/' + d.data.label
+      const raw = d.data.redirected ? '↪ ' + base : base
       return raw.length > 24 ? raw.slice(0, 23) + '…' : raw
     })
     merged.select('text.label').attr('fill', '#0f172a')

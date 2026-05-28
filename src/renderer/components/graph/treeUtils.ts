@@ -1,4 +1,4 @@
-import type { UrlResult } from '@shared/types'
+import { redirectInfo, type UrlResult } from '@shared/types'
 
 export interface TreeNode {
   id: string
@@ -18,6 +18,10 @@ export interface TreeNode {
   isDiscovered: boolean
   resultId: number | null
   statusDist: { ok: number; warn: number; err: number }
+  /** Set when the page was reached via an HTTP redirect. */
+  redirected: boolean
+  redirectStatus: number | null
+  redirectTarget: string
 }
 
 export type ColorMode =
@@ -73,7 +77,10 @@ function makeNode(
     childCount: 0,
     isDiscovered: false,
     resultId: null,
-    statusDist: { ok: 0, warn: 0, err: 0 }
+    statusDist: { ok: 0, warn: 0, err: 0 },
+    redirected: false,
+    redirectStatus: null,
+    redirectTarget: ''
   }
 }
 
@@ -87,6 +94,12 @@ function applyResult(node: TreeNode, r: UrlResult): void {
   node.wordCount = r.content?.wordCount ?? 0
   node.seoScore = r.scores.seo
   node.perfScore = r.scores.performance
+  const redir = redirectInfo(r.http)
+  if (redir) {
+    node.redirected = true
+    node.redirectStatus = redir.status
+    node.redirectTarget = redir.target
+  }
 }
 
 /**
@@ -268,7 +281,9 @@ export function nodeBorder(node: TreeNode): { color: string; dashed: boolean; wi
   const s = node.status
   if (s === null || s >= 500) return { color: '#991b1b', dashed: false, width: 2 }
   if (s >= 400) return { color: '#ef4444', dashed: false, width: 2 }
-  if (s >= 300) return { color: '#3b82f6', dashed: true, width: 1.5 }
+  // A page reached via a redirect is marked blue/dashed even though its final
+  // status is 200.
+  if (node.redirected || (s !== null && s >= 300)) return { color: '#3b82f6', dashed: true, width: 1.5 }
   if (node.healthScore < 20) return { color: '#ef4444', dashed: false, width: 1.5 }
   if (node.healthScore < 50) return { color: '#f97316', dashed: false, width: 1.5 }
   if (node.healthScore < 80) return { color: '#eab308', dashed: false, width: 1.5 }

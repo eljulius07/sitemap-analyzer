@@ -42,7 +42,7 @@ export function Sidebar(): JSX.Element {
           </svg>
         </div>
         <div className="leading-tight">
-          <div className="font-semibold text-sm">Sitemap</div>
+          <div className="font-semibold text-sm">Site</div>
           <div className="text-xs text-slate-500">Analyzer</div>
         </div>
       </div>
