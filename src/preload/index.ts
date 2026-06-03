@@ -21,6 +21,9 @@ function on<T>(channel: string, cb: (payload: T) => void): Unsubscribe {
 }
 
 const api = {
+  /** Host platform (used by the UI to inset the top bar for macOS traffic lights). */
+  platform: process.platform as NodeJS.Platform,
+
   pickSitemapFile: (): Promise<string | null> => ipcRenderer.invoke(IPC.pickSitemapFile),
 
   parseSitemapFile: (filePath: string, settings: CrawlSettings): Promise<ParseSitemapResult> =>

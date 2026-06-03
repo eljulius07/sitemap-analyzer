@@ -4,7 +4,7 @@ import { initSpiderBridge } from './stores/spiderStore'
 import { useMemo } from 'react'
 import { useResultsView } from './hooks/useAnalysis'
 import { SPIDER_COLUMNS, TAB_COLUMNS } from './results/columns'
-import { Sidebar } from './components/Sidebar'
+import { TopBar } from './components/TopBar'
 import { Toasts } from './components/Toasts'
 import { Home } from './components/Home'
 import { ProgressBar } from './components/ProgressBar'
@@ -99,9 +99,9 @@ export default function App(): JSX.Element {
   }, [theme])
 
   return (
-    <div className="flex h-full bg-slate-100 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
-      <Sidebar />
-      <main className="flex-1 min-w-0 flex flex-col">
+    <div className="flex flex-col h-full bg-slate-100 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+      <TopBar />
+      <main className="flex-1 min-w-0 min-h-0 flex flex-col">
         {view === 'home' && <Home />}
         {view === 'results' && <ResultsView />}
         {view === 'settings' && <Settings />}

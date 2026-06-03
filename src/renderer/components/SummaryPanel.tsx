@@ -45,7 +45,7 @@ export function SummaryPanel({ results }: { results: UrlResult[] }): JSX.Element
   )
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
         <div className="text-sm font-medium mb-2">Status distribution</div>
         <div className="h-44">
@@ -74,7 +74,7 @@ export function SummaryPanel({ results }: { results: UrlResult[] }): JSX.Element
         </div>
       </div>
 
-      <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-3 content-start">
+      <div className="lg:col-span-3 grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3 content-start">
         <Card label="Total URLs" value={summary.total.toLocaleString()} />
         <Card label="Avg Health" value={summary.avgHealth} accent={healthColorClass(summary.avgHealth)} />
         <Card label="Avg TTFB" value={`${summary.avgTtfbMs} ms`} />

@@ -3,17 +3,24 @@ import { app, BrowserWindow, shell } from 'electron'
 import { registerIpcHandlers } from './ipc-handlers'
 
 const isDev = !app.isPackaged
+const isMac = process.platform === 'darwin'
 
 function createWindow(): void {
   const win = new BrowserWindow({
-    width: 1280,
-    height: 820,
-    minWidth: 960,
+    width: 1400,
+    height: 880,
+    minWidth: 900,
     minHeight: 600,
     show: false,
     title: 'Site Analyzer',
     backgroundColor: '#0f172a',
     autoHideMenuBar: true,
+    // macOS: hide the title bar but keep the traffic-light buttons (inset).
+    // Other platforms: render frameless with a system overlay for min/max/close.
+    titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
+    titleBarOverlay: !isMac
+      ? { color: '#00000000', symbolColor: '#6b7280', height: 56 }
+      : undefined,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,

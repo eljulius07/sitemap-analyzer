@@ -11,6 +11,9 @@ import {
 } from '../results/columns'
 import { healthColorClass, statusColorClass } from '../utils/format'
 
+const WIDTHS_KEY = 'sitemap-analyzer:column-widths'
+const MIN_COL_WIDTH = 50
+
 const flagClass: Record<NonNullable<FlagLevel>, string> = {
   critical: 'text-rose-500 font-semibold',
   warning: 'text-amber-500 font-medium'
@@ -21,6 +24,15 @@ const rowBg: Record<UrlResult['rowStatus'], string> = {
   warning:
     'bg-amber-50/50 hover:bg-amber-100/60 dark:bg-amber-900/10 dark:hover:bg-amber-900/20',
   error: 'bg-rose-50/60 hover:bg-rose-100/70 dark:bg-rose-900/15 dark:hover:bg-rose-900/25'
+}
+
+function loadWidths(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(WIDTHS_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
 }
 
 function Cell({ column, row }: { column: Column; row: UrlResult }): JSX.Element {
@@ -68,6 +80,9 @@ export function ResultsTable({
   const selectUrl = useStore((s) => s.selectUrl)
   const [sortCol, setSortCol] = useState<string | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [widths, setWidths] = useState<Record<string, number>>(loadWidths)
+
+  const widthOf = (col: Column): number => widths[col.id] ?? col.size
 
   const sorted = useMemo(() => {
     if (!sortCol) return data
@@ -83,7 +98,7 @@ export function ResultsTable({
     })
   }, [data, columns, sortCol, sortDir])
 
-  const totalWidth = columns.reduce((sum, c) => sum + c.size, 0)
+  const totalWidth = columns.reduce((sum, c) => sum + widthOf(c), 0)
 
   const parentRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
@@ -111,24 +126,84 @@ export function ResultsTable({
     }
   }
 
+  /** Begin dragging the right edge of a column header to resize it. */
+  const startResize = (col: Column, event: React.MouseEvent): void => {
+    event.preventDefault()
+    event.stopPropagation()
+    const startX = event.clientX
+    const startWidth = widthOf(col)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const onMove = (e: MouseEvent): void => {
+      const next = Math.max(MIN_COL_WIDTH, Math.round(startWidth + (e.clientX - startX)))
+      setWidths((w) => ({ ...w, [col.id]: next }))
+    }
+    const onUp = (): void => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      // Persist using the freshest state.
+      setWidths((w) => {
+        try {
+          localStorage.setItem(WIDTHS_KEY, JSON.stringify(w))
+        } catch {
+          /* ignore quota errors */
+        }
+        return w
+      })
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+
+  const resetWidth = (col: Column): void => {
+    setWidths((w) => {
+      const next = { ...w }
+      delete next[col.id]
+      try {
+        localStorage.setItem(WIDTHS_KEY, JSON.stringify(next))
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }
+
   return (
     <div ref={parentRef} className="h-full overflow-auto border-t border-slate-200 dark:border-slate-700">
       <table className="text-sm border-collapse" style={{ minWidth: totalWidth }}>
         <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
           <tr>
-            {columns.map((col) => (
-              <th
-                key={col.id}
-                style={{ width: col.size, minWidth: col.size }}
-                onClick={() => onSort(col.id)}
-                className={`px-2 py-2 font-medium text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none whitespace-nowrap ${
-                  col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
-                }`}
-              >
-                {col.header}
-                {sortCol === col.id ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
-              </th>
-            ))}
+            {columns.map((col) => {
+              const w = widthOf(col)
+              return (
+                <th
+                  key={col.id}
+                  style={{ width: w, minWidth: w, maxWidth: w, position: 'relative' }}
+                  onClick={() => onSort(col.id)}
+                  className={`px-2 py-2 font-medium text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none whitespace-nowrap ${
+                    col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
+                  }`}
+                >
+                  {col.header}
+                  {sortCol === col.id ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+                  <span
+                    role="separator"
+                    aria-label={`Resize ${col.header} column`}
+                    title="Drag to resize · double-click to reset"
+                    onMouseDown={(e) => startResize(col, e)}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation()
+                      resetWidth(col)
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-brand-500/50 active:bg-brand-500"
+                  />
+                </th>
+              )
+            })}
           </tr>
         </thead>
         <tbody>
@@ -145,17 +220,20 @@ export function ResultsTable({
                 onClick={() => selectUrl(row.id)}
                 className={`cursor-pointer border-b border-slate-100 dark:border-slate-700/50 ${rowBg[row.rowStatus]}`}
               >
-                {columns.map((col) => (
-                  <td
-                    key={col.id}
-                    style={{ width: col.size, minWidth: col.size, maxWidth: col.size }}
-                    className={`px-2 py-1.5 whitespace-nowrap ${
-                      col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
-                    }`}
-                  >
-                    <Cell column={col} row={row} />
-                  </td>
-                ))}
+                {columns.map((col) => {
+                  const w = widthOf(col)
+                  return (
+                    <td
+                      key={col.id}
+                      style={{ width: w, minWidth: w, maxWidth: w }}
+                      className={`px-2 py-1.5 whitespace-nowrap ${
+                        col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
+                      }`}
+                    >
+                      <Cell column={col} row={row} />
+                    </td>
+                  )
+                })}
               </tr>
             )
           })}

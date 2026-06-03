@@ -20,6 +20,14 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Window drag region for the custom title bar */
+.app-drag {
+  -webkit-app-region: drag;
+}
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 /* Pulsing highlight for tree search matches */
 @keyframes tree-pulse {
   0%,
