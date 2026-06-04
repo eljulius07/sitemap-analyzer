@@ -12,7 +12,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    title: 'Site Analyzer',
+    title: 'SpiderSEO',
     backgroundColor: '#0f172a',
     autoHideMenuBar: true,
     // macOS: hide the title bar but keep the traffic-light buttons (inset).

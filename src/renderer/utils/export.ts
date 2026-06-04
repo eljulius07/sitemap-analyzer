@@ -97,7 +97,7 @@ export async function buildWorkbook(
   // exceljs is large (~600 KB) — load it on demand only when exporting.
   const ExcelJS = (await import('exceljs')).default
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'Site Analyzer'
+  wb.creator = 'SpiderSEO'
   wb.created = new Date()
 
   // Summary sheet first.
@@ -299,7 +299,7 @@ export function generateHtmlReport(
       : ''
 
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Site Analyzer Report</title>
+<html lang="en"><head><meta charset="utf-8"><title>SpiderSEO Report</title>
 <style>
   :root { color-scheme: light dark; }
   body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; background: #f8fafc; color: #0f172a; }
@@ -333,7 +333,7 @@ export function generateHtmlReport(
   @media print { details { break-inside: avoid; } summary { list-style: none; } body { margin: 0; } }
 </style></head>
 <body>
-  <h1>Site Analyzer Report</h1>
+  <h1>SpiderSEO Report</h1>
   <div class="sub">Generated ${esc(new Date().toLocaleString())} · Source: ${esc(source || 'n/a')} · ${summary.total} URLs</div>
 
   <div class="cards">

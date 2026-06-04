@@ -1,5 +1,5 @@
 appId: com.sitemapanalyzer.app
-productName: Site Analyzer
+productName: SpiderSEO
 directories:
   output: release
   buildResources: build

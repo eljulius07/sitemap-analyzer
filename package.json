@@ -2,7 +2,7 @@
   "name": "sitemap-analyzer",
   "version": "1.0.0",
   "description": "Cross-platform desktop SEO crawler & site auditor. Sitemap or spider mode, per-URL SEO / Performance / Content / Technical / Social / Images / Links analysis with weighted health score, problems panel, redirect & gzip / HTTP-3 detection, interactive site tree, sitemap generator and CSV / XLSX / HTML / PNG / SVG / JSON / GEXF exports.",
-  "author": "Site Analyzer",
+  "author": "SpiderSEO",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

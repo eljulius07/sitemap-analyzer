@@ -74,7 +74,7 @@ export function TopBar(): JSX.Element {
             <path d="M4 5h16M4 12h10M4 19h16" strokeWidth="2" strokeLinecap="round" />
           </svg>
         </div>
-        <span className="font-semibold text-sm whitespace-nowrap">Site Analyzer</span>
+        <span className="font-semibold text-sm whitespace-nowrap">SpiderSEO</span>
       </div>
 
       {/* Nav — left-aligned next to the brand */}

@@ -1,4 +1,4 @@
-# Site Analyzer
+# SpiderSEO
 
 A cross-platform desktop app (macOS · Windows) for **crawling websites and auditing their SEO, performance, content, and technical health**, then visualizing the site as an interactive tree and generating a custom `sitemap.xml`.
 
@@ -183,7 +183,7 @@ src/
 
 ## Privacy
 
-Site Analyzer is fully local. It has **no telemetry, no analytics, and no backend**. Crawl results stay in memory and are only written to disk when you explicitly export. Errors are logged to a local file in the app's `userData` directory.
+SpiderSEO is fully local. It has **no telemetry, no analytics, and no backend**. Crawl results stay in memory and are only written to disk when you explicitly export. Errors are logged to a local file in the app's `userData` directory.
 
 ---
 
