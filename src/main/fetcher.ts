@@ -1,6 +1,7 @@
 import axios, { type AxiosResponse } from 'axios'
 import type { IncomingMessage } from 'node:http'
-import type { Readable } from 'node:stream'
+import { type Readable } from 'node:stream'
+import zlib from 'node:zlib'
 import { analyzeHtml } from './analyzer'
 import { evaluateResult } from '@shared/scoring'
 import type { HttpInfo, RedirectHop, UrlResult } from '@shared/types'
@@ -17,8 +18,41 @@ const HEADER_KEYS = [
   'cache-control',
   'etag',
   'content-type',
-  'last-modified'
+  'last-modified',
+  'content-encoding',
+  'alt-svc'
 ] as const
+
+/**
+ * Parse an Alt-Svc header value into the list of advertised protocol IDs.
+ * Format: `h3=":443"; ma=86400, h3-29=":443"; ma=86400, h2=":443"`.
+ * Returns e.g. `['h3', 'h3-29', 'h2']`. Empty array for "clear" or missing.
+ */
+function parseAltSvc(value: string): string[] {
+  const v = value.trim()
+  if (!v || v.toLowerCase() === 'clear') return []
+  const out = new Set<string>()
+  for (const entry of v.split(',')) {
+    const m = /^\s*([a-zA-Z0-9-]+)=/.exec(entry)
+    if (m) out.add(m[1])
+  }
+  return [...out]
+}
+
+/** Wrap the raw response stream with the right decompressor when needed. */
+function decompressIfNeeded(stream: Readable, encoding: string): Readable {
+  switch (encoding) {
+    case 'gzip':
+    case 'x-gzip':
+      return stream.pipe(zlib.createGunzip())
+    case 'br':
+      return stream.pipe(zlib.createBrotliDecompress())
+    case 'deflate':
+      return stream.pipe(zlib.createInflate())
+    default:
+      return stream
+  }
+}
 
 export interface FetchOpts {
   timeoutMs: number
@@ -124,13 +158,16 @@ export async function fetchPage(
         maxRedirects: 0,
         timeout: opts.timeoutMs,
         signal,
-        decompress: true,
+        // We disable axios' built-in decompression so the original
+        // Content-Encoding header remains visible on the response — that's
+        // the only reliable way to detect gzip/br/deflate. We decompress
+        // ourselves below.
+        decompress: false,
         headers: {
           'User-Agent': opts.userAgent,
-          // Mimic a real browser so servers that redirect based on content
-          // negotiation (e.g. language) behave the same as in a browser.
           Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9'
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br'
         },
         validateStatus: () => true
       })
@@ -164,10 +201,19 @@ export async function fetchPage(
     const contentType = String(response.headers['content-type'] ?? '')
     const isHtml = contentType.toLowerCase().includes('text/html')
 
+    // Content-Encoding is now reliably on response.headers (decompress: false).
+    const contentEncoding = String(response.headers['content-encoding'] ?? '').toLowerCase().trim()
+    const compressed =
+      contentEncoding === 'gzip' ||
+      contentEncoding === 'x-gzip' ||
+      contentEncoding === 'br' ||
+      contentEncoding === 'deflate'
+
     let html: string | null = null
     let bytes = 0
     if (isHtml) {
-      const body = await readCapped(response.data)
+      const bodyStream = compressed ? decompressIfNeeded(response.data, contentEncoding) : response.data
+      const body = await readCapped(bodyStream)
       html = body.text
       bytes = body.bytes
     } else {
@@ -176,15 +222,19 @@ export async function fetchPage(
     const totalDownloadMs = Date.now() - finalHopStart
 
     const rawRes = (response.request as { res?: IncomingMessage } | undefined)?.res
-    const rawHeaders = rawRes?.headers ?? {}
-    const contentEncoding = String(rawHeaders['content-encoding'] ?? '').toLowerCase()
     const httpVersion = rawRes?.httpVersion ?? '1.1'
 
     const headers: Record<string, string> = {}
     for (const key of HEADER_KEYS) {
-      const v = response.headers[key] ?? rawHeaders[key]
+      const v = response.headers[key]
       if (v !== undefined) headers[key] = String(v)
     }
+
+    // Server-advertised HTTP/2 + HTTP/3 support via Alt-Svc.
+    const altSvcRaw = headers['alt-svc'] ?? ''
+    const advertised = parseAltSvc(altSvcRaw)
+    const supportsH2 = advertised.some((p) => p === 'h2' || p === 'h2c' || p.startsWith('h2-'))
+    const supportsH3 = advertised.some((p) => p === 'h3' || p.startsWith('h3-'))
 
     const headerLength = response.headers['content-length']
     const contentLengthKb =
@@ -204,7 +254,10 @@ export async function fetchPage(
       contentType,
       contentLengthKb,
       httpVersion,
-      compressed: contentEncoding !== '' && contentEncoding !== 'identity',
+      compressed,
+      contentEncoding,
+      supportsH2,
+      supportsH3,
       headers
     }
 
@@ -230,6 +283,9 @@ export function buildErrorResult(id: number, url: string, error: string): UrlRes
     contentLengthKb: null,
     httpVersion: '',
     compressed: false,
+    contentEncoding: '',
+    supportsH2: false,
+    supportsH3: false,
     headers: {}
   }
   const base = {

@@ -137,6 +137,7 @@ const CONTENT_EXPORT_EXTRA: Column[] = [
 export const TECH_COLUMNS: Column[] = [
   { id: 'https', header: 'HTTPS', size: 70, align: 'center', get: (r) => r.technical?.https ?? null, flag: (r) => (r.technical && !r.technical.https ? 'critical' : null) },
   { id: 'http2', header: 'HTTP/2', size: 70, align: 'center', get: (r) => r.technical?.http2 ?? null },
+  { id: 'http3', header: 'HTTP/3', size: 70, align: 'center', get: (r) => r.technical?.http3 ?? null },
   { id: 'doctype', header: 'Doctype', size: 80, align: 'center', get: (r) => r.technical?.hasDoctype ?? null, flag: (r) => (r.technical && !r.technical.hasDoctype ? 'warning' : null) },
   { id: 'charset', header: 'Charset', size: 80, align: 'center', get: (r) => r.technical?.hasCharset ?? null, flag: (r) => (r.technical && !r.technical.hasCharset ? 'warning' : null) },
   { id: 'viewport', header: 'Viewport', size: 80, align: 'center', get: (r) => r.technical?.hasViewport ?? null, flag: (r) => (r.technical && !r.technical.hasViewport ? 'warning' : null) },

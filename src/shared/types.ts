@@ -55,6 +55,12 @@ export interface HttpInfo {
   httpVersion: string
   /** Whether the response body was compressed (gzip/br/deflate). */
   compressed: boolean
+  /** Content-Encoding used by the server ("gzip", "br", "deflate") or empty. */
+  contentEncoding: string
+  /** Server advertises HTTP/2 support via Alt-Svc. */
+  supportsH2: boolean
+  /** Server advertises HTTP/3 support via Alt-Svc. */
+  supportsH3: boolean
   /** Selected response headers (lower-cased keys). */
   headers: Record<string, string>
 }
@@ -153,6 +159,7 @@ export interface ContentAnalysis {
 export interface TechnicalAnalysis {
   https: boolean
   http2: boolean
+  http3: boolean
   hasDoctype: boolean
   hasCharset: boolean
   hasViewport: boolean

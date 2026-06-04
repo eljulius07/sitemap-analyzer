@@ -292,7 +292,10 @@ function analyzeTechnical($: CheerioAPI, pageUrl: string, html: string, http: Ht
   const h = http.headers
   return {
     https: pageUrl.toLowerCase().startsWith('https://'),
-    http2: http.httpVersion.startsWith('2'),
+    // HTTP/2: actual protocol if we negotiated it, otherwise server advertises it via Alt-Svc.
+    http2: http.httpVersion.startsWith('2') || http.supportsH2,
+    // HTTP/3 detection is via Alt-Svc only (Node's http client doesn't speak QUIC).
+    http3: http.supportsH3,
     hasDoctype: /<!doctype\s+html/i.test(html.slice(0, 200)),
     hasCharset:
       $('meta[charset]').length > 0 || $('meta[http-equiv="Content-Type"]').length > 0,
