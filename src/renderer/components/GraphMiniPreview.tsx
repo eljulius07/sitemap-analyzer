@@ -11,10 +11,9 @@ interface Pt {
 
 export function GraphMiniPreview({ results }: { results: UrlResult[] }): JSX.Element {
   const { points, edges } = useMemo(() => {
-    const W = 300
-    const H = 200
-    const cx = W / 2
-    const cy = H / 2
+    const SIZE = 200
+    const cx = SIZE / 2
+    const cy = SIZE / 2
     const shown = results.filter((r) => (r.spider?.depth ?? 0) <= 2).slice(0, 80)
     const byDepth = new Map<number, UrlResult[]>()
     for (const r of shown) {
@@ -22,7 +21,7 @@ export function GraphMiniPreview({ results }: { results: UrlResult[] }): JSX.Ele
       if (!byDepth.has(d)) byDepth.set(d, [])
       byDepth.get(d)!.push(r)
     }
-    const radii = [0, 55, 92]
+    const radii = [0, 50, 85]
     const pos = new Map<string, Pt>()
     for (const [depth, list] of byDepth) {
       const radius = radii[Math.min(depth, 2)]
@@ -50,7 +49,11 @@ export function GraphMiniPreview({ results }: { results: UrlResult[] }): JSX.Ele
   }, [results])
 
   return (
-    <svg viewBox="0 0 300 200" className="w-[300px] h-[200px] rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+    <svg
+      viewBox="0 0 200 200"
+      preserveAspectRatio="xMidYMid meet"
+      className="w-full h-full rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700"
+    >
       {edges.map((e, i) => (
         <line key={i} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2} stroke="currentColor" className="text-slate-300 dark:text-slate-600" strokeWidth={0.5} />
       ))}
@@ -60,7 +63,7 @@ export function GraphMiniPreview({ results }: { results: UrlResult[] }): JSX.Ele
         </circle>
       ))}
       {points.length === 0 && (
-        <text x={150} y={100} textAnchor="middle" className="fill-slate-400 text-[11px]">
+        <text x={100} y={100} textAnchor="middle" className="fill-slate-400 text-[11px]">
           discovering…
         </text>
       )}

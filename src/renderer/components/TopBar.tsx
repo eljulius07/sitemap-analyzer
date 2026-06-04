@@ -77,25 +77,9 @@ export function TopBar(): JSX.Element {
         <span className="font-semibold text-sm whitespace-nowrap">Site Analyzer</span>
       </div>
 
-      {/* Mode / context indicator — clickable to return Home */}
-      {context && (
-        <>
-          <span className="text-slate-300 dark:text-slate-700">·</span>
-          <button
-            onClick={() => setView('home')}
-            title="Back to Home"
-            className="app-no-drag flex items-center gap-2 px-2.5 py-1 rounded-md text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 min-w-0 max-w-md"
-          >
-            <span className="shrink-0">{context.icon}</span>
-            <span className="shrink-0 font-medium text-slate-600 dark:text-slate-300">{context.label}:</span>
-            <span className="truncate">{context.source}</span>
-            {context.status && <span className="shrink-0 text-brand-500">· {context.status}</span>}
-          </button>
-        </>
-      )}
-
-      {/* Nav */}
-      <nav className="app-no-drag ml-auto mr-auto flex items-center gap-1">
+      {/* Nav — left-aligned next to the brand */}
+      <span className="text-slate-300 dark:text-slate-700 hidden md:inline">·</span>
+      <nav className="app-no-drag flex items-center gap-1 shrink-0">
         {NAV.map((item) => {
           const active = view === item.id
           return (
@@ -131,6 +115,23 @@ export function TopBar(): JSX.Element {
           )
         })}
       </nav>
+
+      {/* Spacer pushes the domain + actions to the right */}
+      <div className="flex-1" />
+
+      {/* Mode / context indicator — right side, clickable to return Home */}
+      {context && (
+        <button
+          onClick={() => setView('home')}
+          title="Back to Home"
+          className="app-no-drag flex items-center gap-2 px-2.5 py-1 rounded-md text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 min-w-0 max-w-xs"
+        >
+          <span className="shrink-0">{context.icon}</span>
+          <span className="shrink-0 font-medium text-slate-600 dark:text-slate-300">{context.label}:</span>
+          <span className="truncate">{context.source}</span>
+          {context.status && <span className="shrink-0 text-brand-500">· {context.status}</span>}
+        </button>
+      )}
 
       {/* Right actions */}
       <div className="app-no-drag flex items-center gap-1 shrink-0">

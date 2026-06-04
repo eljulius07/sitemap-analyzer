@@ -67,10 +67,12 @@ export function useResultsView(): ResultsView {
   const healthMax = useStore((s) => s.healthMax)
   const activeTab = useStore((s) => s.activeTab)
   const tabFilters = useStore((s) => s.tabFilters)
+  const activeProblem = useStore((s) => s.activeProblem)
 
   const globalFiltered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return augmented.filter((r) => {
+      if (activeProblem && !activeProblem.urls.has(r.url)) return false
       if (!matchesSearch(r, q)) return false
       if (statusGroups.size > 0 && !statusGroups.has(statusGroupOf(r.http.statusCode))) return false
       if (r.healthScore < healthMin || r.healthScore > healthMax) return false
@@ -88,7 +90,7 @@ export function useResultsView(): ResultsView {
       }
       return true
     })
-  }, [augmented, search, statusGroups, severities, healthMin, healthMax])
+  }, [augmented, search, statusGroups, severities, healthMin, healthMax, activeProblem])
 
   const filtered = useMemo(() => {
     if (tabFilters.size === 0) return globalFiltered

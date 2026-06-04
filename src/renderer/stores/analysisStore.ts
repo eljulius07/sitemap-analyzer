@@ -21,11 +21,52 @@ export type TabId =
   | 'links'
   | 'graph'
   | 'sitemap'
+
+/** Sub-tab in the right sidebar. */
+export type SidebarTab = 'overview' | 'problems'
+
+export interface ActiveProblem {
+  id: string
+  name: string
+  category: TabId
+  /** Set of URLs the problem applies to — used to filter the table. */
+  urls: Set<string>
+}
 export type StatusGroup = '2xx' | '3xx' | '4xx' | '5xx' | 'errors'
 export type SeverityFilter = 'critical' | 'warning' | 'info' | 'none'
 
 const SETTINGS_KEY = 'sitemap-analyzer:settings'
 const THEME_KEY = 'sitemap-analyzer:theme'
+const SIDEBAR_KEY = 'sitemap-analyzer:sidebar'
+
+const SIDEBAR_MIN = 280
+const SIDEBAR_MAX = 500
+const SIDEBAR_DEFAULT = 320
+
+function loadSidebar(): { open: boolean; width: number; tab: SidebarTab } {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_KEY)
+    if (raw) {
+      const v = JSON.parse(raw) as { open?: boolean; width?: number; tab?: SidebarTab }
+      return {
+        open: v.open ?? true,
+        width: Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, v.width ?? SIDEBAR_DEFAULT)),
+        tab: v.tab === 'problems' ? 'problems' : 'overview'
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return { open: true, width: SIDEBAR_DEFAULT, tab: 'overview' }
+}
+
+function persistSidebar(open: boolean, width: number, tab: SidebarTab): void {
+  try {
+    localStorage.setItem(SIDEBAR_KEY, JSON.stringify({ open, width, tab }))
+  } catch {
+    /* ignore */
+  }
+}
 
 function loadSettings(): CrawlSettings {
   try {
@@ -76,6 +117,14 @@ interface AnalysisState {
   healthMin: number
   healthMax: number
   tabFilters: Set<string>
+  activeProblem: ActiveProblem | null
+  /** Currently selected problem in the Problems tab (drives the sidebar detail). */
+  selectedProblemId: string | null
+
+  // right sidebar state
+  sidebarOpen: boolean
+  sidebarWidth: number
+  sidebarTab: SidebarTab
 
   setView: (view: View) => void
   setInputMode: (mode: InputMode) => void
@@ -102,6 +151,13 @@ interface AnalysisState {
   setHealthRange: (min: number, max: number) => void
   toggleTabFilter: (id: string) => void
   clearFilters: () => void
+  setActiveProblem: (p: ActiveProblem) => void
+  clearActiveProblem: () => void
+  setSelectedProblem: (id: string | null) => void
+
+  setSidebarOpen: (open: boolean) => void
+  setSidebarWidth: (w: number) => void
+  setSidebarTab: (tab: SidebarTab) => void
 
   pushToast: (kind: Toast['kind'], message: string) => void
   dismissToast: (id: number) => void
@@ -139,6 +195,12 @@ export const useStore = create<AnalysisState>((set, get) => ({
   healthMin: 0,
   healthMax: 100,
   tabFilters: new Set(),
+  activeProblem: null,
+  selectedProblemId: null,
+
+  sidebarOpen: loadSidebar().open,
+  sidebarWidth: loadSidebar().width,
+  sidebarTab: loadSidebar().tab,
 
   setView: (view) => set({ view }),
   setInputMode: (inputMode) => set({ inputMode }),
@@ -290,8 +352,27 @@ export const useStore = create<AnalysisState>((set, get) => ({
       severities: new Set(),
       healthMin: 0,
       healthMax: 100,
-      tabFilters: new Set()
+      tabFilters: new Set(),
+      activeProblem: null
     }),
+
+  setActiveProblem: (activeProblem) => set({ activeProblem }),
+  clearActiveProblem: () => set({ activeProblem: null }),
+  setSelectedProblem: (selectedProblemId) => set({ selectedProblemId }),
+
+  setSidebarOpen: (sidebarOpen) => {
+    persistSidebar(sidebarOpen, get().sidebarWidth, get().sidebarTab)
+    set({ sidebarOpen })
+  },
+  setSidebarWidth: (w) => {
+    const sidebarWidth = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, w))
+    persistSidebar(get().sidebarOpen, sidebarWidth, get().sidebarTab)
+    set({ sidebarWidth })
+  },
+  setSidebarTab: (sidebarTab) => {
+    persistSidebar(get().sidebarOpen, get().sidebarWidth, sidebarTab)
+    set({ sidebarTab })
+  },
 
   pushToast: (kind, message) => {
     const id = toastSeq++

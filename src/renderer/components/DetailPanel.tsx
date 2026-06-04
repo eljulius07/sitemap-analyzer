@@ -197,9 +197,7 @@ export function DetailPanel(): JSX.Element | null {
   if (id === null || !result) return null
 
   return (
-    <>
-      <div className="fixed inset-0 bg-black/30 z-30" onClick={() => selectUrl(null)} />
-      <div className="fixed right-0 top-0 bottom-0 w-[40%] min-w-[440px] max-w-[680px] bg-white dark:bg-slate-900 shadow-2xl z-40 flex flex-col">
+    <div className="h-full flex flex-col bg-white dark:bg-slate-900">
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-4">
           <HealthScoreGauge score={result.healthScore} size={84} />
           <div className="min-w-0 flex-1">
@@ -244,7 +242,6 @@ export function DetailPanel(): JSX.Element | null {
             <CategoryView result={result} category={subTab} />
           )}
         </div>
-      </div>
-    </>
+    </div>
   )
 }
