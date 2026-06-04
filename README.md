@@ -1,8 +1,8 @@
 # Site Analyzer
 
-A cross-platform desktop app (macOS · Windows) for **crawling websites and auditing their SEO, performance, content, and technical health** — then visualizing the site as an interactive tree and generating a custom `sitemap.xml`.
+A cross-platform desktop app (macOS · Windows) for **crawling websites and auditing their SEO, performance, content, and technical health** — Screaming Frog–style — then visualizing the site as an interactive tree and generating a custom `sitemap.xml`.
 
-Built with Electron + React + TypeScript. All crawling runs in the Electron main process, so there are **no CORS limits** and **no data ever leaves your machine**.
+Built with Electron + React + TypeScript. All crawling runs in the Electron main process, so there are **no CORS limits** and **no data ever leaves your machine** (no telemetry, no backend).
 
 ![Electron](https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
@@ -35,42 +35,46 @@ Every crawled page is analyzed across seven categories and scored 0–100:
 
 | Category | Examples of what's checked |
 |----------|----------------------------|
-| **SEO** | title/length/pixel width, meta description, H1–H3, heading hierarchy, canonical & indexability, URL hygiene, hreflang |
-| **Performance** | TTFB, total download, redirect time/count, HTML size, JS/CSS counts, render-blocking resources, lazy-loading, resource hints |
-| **Content** | word count, text/HTML ratio, reading level, paragraphs, media (table/video/audio/iframe), language |
-| **Technical** | HTTPS, doctype/charset/viewport/favicon, response headers (Server, CSP, HSTS, Cache-Control, ETag…) |
-| **Social & Schema** | Open Graph, Twitter Card, JSON-LD types & validity (Article/Product/FAQ/Breadcrumb/LocalBusiness) |
-| **Images** | total, missing/empty alt, missing dimensions, next-gen vs legacy formats, lazy-loaded, srcset |
-| **Links** | internal/external, nofollow/sponsored/ugc, empty anchors, `#`-only, `javascript:` links |
+| **SEO** | title / length / pixel width, meta description, H1–H3, heading hierarchy, canonical & indexability, URL hygiene, hreflang |
+| **Performance** | TTFB, total download, redirect time / count, HTML size, **gzip / brotli / deflate** detection + real decompression, JS / CSS counts, render-blocking resources, lazy-loading, resource hints |
+| **Content** | word count, text/HTML ratio, reading level, paragraphs, media (table / video / audio / iframe), language |
+| **Technical** | HTTPS, **HTTP/2 + HTTP/3 detection via Alt-Svc**, doctype / charset / viewport / favicon, response headers (Server, CSP, HSTS, Cache-Control, ETag…) |
+| **Social & Schema** | Open Graph, Twitter Card, JSON-LD types & validity (Article / Product / FAQ / Breadcrumb / LocalBusiness) |
+| **Images** | total, missing / empty alt, missing dimensions, next-gen vs legacy formats, lazy-loaded, srcset — plus per-page **on-demand inspector** that returns each image's real weight (KB) and intrinsic dimensions (px) |
+| **Links** | internal / external, nofollow / sponsored / ugc, empty anchors, `#`-only, `javascript:` links |
 
-A **weighted health score** combines them (SEO 35% · Performance 25% · Content 15% · Technical 10% · Social 10% · Images 5%) and each finding becomes a **critical / warning** issue. **Redirects are detected** even when followed — a dedicated column and graph marker show the final destination.
+A **weighted health score** combines them (SEO 35 % · Performance 25 % · Content 15 % · Technical 10 % · Social 10 % · Images 5 %) and each finding becomes a **critical / warning** issue. **Redirects are followed and surfaced** in a dedicated column with the redirect status + final destination, and the tree node is marked.
 
-### Results dashboard
-- Category **tabs** (Overview, SEO, Performance, Content, Technical, Social & Schema, Images, Links)
-- **Global filters** (status group, severity, health range, text search) + **per-tab filter pills** with live counts
-- **Virtualized** sortable table (handles tens of thousands of rows)
-- **Detail panel** with per-category sub-tabs, issues, recommendations, and copy-to-clipboard
-- Summary panel with a status-distribution donut and key metric cards
-- Live progress with **pause / resume / cancel** and ETA
+### Results dashboard (Screaming Frog–style)
+- **Slim top bar** (frameless, native window controls): logo + nav (Home / Results / Settings) + active crawl context (`🕷️ Spider: domain.com`) + theme toggle + GitHub link.
+- Category **tabs** (Overview, SEO, Performance, Content, Technical, Social & Schema, Images, Links) over a **virtualized, sortable, resizable-column table**.
+- **Global filters** (status group, severity, health range, text search) + **per-tab filter pills** with live counts.
+- **"Large Images (>100 KB)" filter pill** — clicking it triggers a bulk inspection of every page's images (real bytes via partial GET + intrinsic dimensions from the image header) with live progress, then filters the table to the affected pages.
+- **Right sidebar** (resizable 280–1200 px, collapsible, persisted):
+  - **Descripción general** sub-tab — contextual stats per active category (counts, charts).
+  - **Problemas** sub-tab — full catalog of detected issues classified as **Problema / Aviso / Oportunidad** with priority, affected URL count and %. Clicking a problem filters the main table to those URLs and pins description + how-to-fix in the lower half of the sidebar (height drag-adjustable).
+  - When a table row is selected: full per-URL detail (sub-tabs Summary · SEO · Performance · Content · Technical · Social · Images · Links · with images list + heavy-image highlighting).
+- Live progress dashboard with depth counts, throughput, ETA, mini live graph and **pause / resume / cancel**.
 
 ### Site graph
-- **Clean URL-path tree** (the default) — vertical, radial/star, or left-right layouts. Branches by URL path, not by link soup. Missing intermediates appear as dashed **ghost nodes**.
-- Collapse/expand (with animation), color-by modes (health, status, response time, word count, SEO, performance, depth), node search, breadcrumb, and a minimap.
+- **Clean URL-path tree** (default) — vertical, radial / star, or left-right layouts. Branches by URL path, not by link soup. Missing intermediates appear as dashed **ghost nodes**.
+- Collapse / expand with animation, color-by modes (health, status, response time, word count, SEO, performance, depth), node search with pulse highlight, breadcrumb, and a live minimap.
+- Redirect-marked nodes with arrow prefix + blue dashed border.
 - The raw **force-directed link graph** is still available behind a *Show link graph (advanced)* toggle.
 
 ### Sitemap generator
-- Output as **XML**, **XML + sitemap index** (auto-split, zipped), or **TXT**
-- `<lastmod>` (header / crawl date / custom), `<changefreq>` (auto-by-depth or uniform), `<priority>` (auto-calculated or uniform with pattern overrides)
-- **hreflang** alternates (auto-detected from pages or manual marker mapping with `x-default`)
-- **Image** and **News** sitemap extensions
-- Manual URL selection, include/exclude patterns, gzip output, live **preview + validation**
+- Output as **XML**, **XML + sitemap index** (auto-split, zipped), or **TXT**.
+- `<lastmod>` (header / crawl date / custom), `<changefreq>` (auto-by-depth or uniform), `<priority>` (auto-calculated by depth + inbound links, or uniform with pattern overrides).
+- **hreflang** alternates (auto-detected from pages or manual marker mapping with `x-default`).
+- **Image** and **News** sitemap extensions.
+- Manual URL selection, include / exclude glob patterns, gzip output, live **preview + validation**.
 
 ### Exports
-- **CSV** (all columns or current tab, UTF-8 BOM for Excel)
-- **XLSX** multi-sheet workbook (summary + one sheet per category + a spider "Site Structure" sheet), with conditional formatting
-- **HTML report** (self-contained, dark/light aware, print-friendly)
-- **Graph**: PNG, SVG, JSON, GEXF (for Gephi)
-- **Tree**: PNG, SVG, self-contained interactive HTML, indented text
+- **CSV** (all columns or current tab, UTF-8 BOM for Excel).
+- **XLSX** multi-sheet workbook (summary + one sheet per category + a spider "Site Structure" sheet) with conditional formatting.
+- **HTML report** (self-contained, dark / light aware, print-friendly).
+- **Graph**: PNG, SVG, JSON, GEXF (for Gephi).
+- **Tree**: PNG, SVG, self-contained interactive HTML, indented text.
 
 ---
 
@@ -79,8 +83,8 @@ A **weighted health score** combines them (SEO 35% · Performance 25% · Content
 - **Shell:** [Electron](https://www.electronjs.org/) 33 + [electron-builder](https://www.electron.build/)
 - **Build:** [electron-vite](https://electron-vite.org/) / [Vite](https://vitejs.dev/) 5
 - **UI:** [React](https://react.dev/) 18 · [TypeScript](https://www.typescriptlang.org/) 5 · [Tailwind CSS](https://tailwindcss.com/) 3 · [zustand](https://github.com/pmndrs/zustand)
-- **Crawling/analysis:** [axios](https://axios-http.com/) · [cheerio](https://cheerio.js.org/) · [fast-xml-parser](https://github.com/NaturalIntelligence/fast-xml-parser) · [robots-parser](https://github.com/samclarke/robots-parser) · [minimatch](https://github.com/isaacs/minimatch)
-- **Visualization/export:** [d3](https://d3js.org/) · [@tanstack/react-virtual](https://tanstack.com/virtual) · [recharts](https://recharts.org/) · [exceljs](https://github.com/exceljs/exceljs) · [jszip](https://stuk.github.io/jszip/)
+- **Crawling / analysis:** [axios](https://axios-http.com/) · Node `zlib` for gzip / brotli / deflate · [cheerio](https://cheerio.js.org/) · [fast-xml-parser](https://github.com/NaturalIntelligence/fast-xml-parser) · [robots-parser](https://github.com/samclarke/robots-parser) · [minimatch](https://github.com/isaacs/minimatch) · [image-size](https://github.com/image-size/image-size) (per-image probing)
+- **Visualization / export:** [d3](https://d3js.org/) · [@tanstack/react-virtual](https://tanstack.com/virtual) · [recharts](https://recharts.org/) · [exceljs](https://github.com/exceljs/exceljs) · [jszip](https://stuk.github.io/jszip/)
 
 ---
 
@@ -141,11 +145,12 @@ Per-crawl settings (concurrency, timeout, user-agent, follow redirects, retry) l
 ```
 src/
 ├── main/                     # Electron main process (Node)
-│   ├── index.ts              # window creation, external-link handling
+│   ├── index.ts              # window creation, external-link handling, frameless title bar
 │   ├── ipc-handlers.ts       # IPC bridge + file dialogs + error logging
-│   ├── fetcher.ts            # HTTP fetch: redirect chain, timing, headers
+│   ├── fetcher.ts            # HTTP fetch: redirect chain, timing, headers, manual gzip/br/deflate, Alt-Svc h2/h3
 │   ├── crawler.ts            # sitemap-mode concurrency pool
 │   ├── spider.ts             # spider-mode BFS discovery engine
+│   ├── image-inspector.ts    # per-image weight (Content-Range) + intrinsic dimensions
 │   ├── parser.ts             # sitemap.xml / index / gzip parsing
 │   ├── analyzer.ts           # cheerio HTML analysis (7 categories)
 │   ├── url-normalizer.ts     # URL normalization + dedup
@@ -170,7 +175,9 @@ src/
 - **Main process** does all networking and parsing. The renderer never touches Node directly — it talks to a small, typed API exposed through a **`contextBridge`** preload (`contextIsolation: true`, `nodeIntegration: false`).
 - **Streaming IPC**: as each page finishes, the main process streams a `*:page-result` event to the renderer, which buffers and flushes in batches for smooth updates on large crawls.
 - **Shared scoring** lives in `src/shared` so both the main process (per-URL, at crawl time) and the renderer (re-evaluated with cross-URL duplicate detection) use identical logic.
-- **Security**: strict Content-Security-Policy, no remote code, and all external links open in the system browser (`setWindowOpenHandler` + `will-navigate`) — the app never navigates away from itself.
+- **Lazy chunks**: heavy modules (`exceljs`, `jszip`, `d3` via the Site Tree, the Sitemap Generator) are split into separate chunks loaded on demand — the initial bundle is ~1.2 MB instead of ~3 MB.
+- **Honest compression / protocol detection**: gzip / brotli / deflate are decompressed in-house (axios's auto-decompression hides the original `Content-Encoding`), and HTTP/2 + HTTP/3 server support is detected from the `Alt-Svc` header.
+- **Security**: strict Content-Security-Policy (with `blob:` allowed for image rasterization only), no remote code, and all external links open in the system browser (`setWindowOpenHandler` + `will-navigate`) — the app never navigates away from itself.
 
 ---
 
@@ -192,9 +199,9 @@ Site Analyzer is fully local. It has **no telemetry, no analytics, and no backen
 
 ## Known limitations
 
-- The site graph renders with **SVG**; very large graphs (2000+ nodes) stay responsive thanks to default-collapsed branches, but there is no dedicated canvas/WebGL renderer.
-- **Total page weight** is estimated from the HTML document — external resources (JS/CSS/images) are parsed but not downloaded.
-- **HTTP/2** detection is best-effort (the Node HTTP client negotiates HTTP/1.1).
+- The site graph renders with **SVG**; very large graphs (2000+ nodes) stay responsive thanks to default-collapsed branches, but there is no dedicated canvas / WebGL renderer.
+- **Total page weight** is estimated from the HTML document by default. The on-demand **Image inspector** does fetch each image (partial range request) to surface real weight + intrinsic dimensions, but JS / CSS bytes are not downloaded.
+- **HTTP/2 + HTTP/3** support is detected via the `Alt-Svc` header (server advertisement). The crawler itself negotiates HTTP/1.1 since Node's built-in client doesn't speak QUIC.
 - **Video** sitemap entries require embed metadata that isn't currently extracted.
 
 ---
