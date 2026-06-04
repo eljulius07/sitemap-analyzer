@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs'
+import type ExcelJSType from 'exceljs'
 import type { Category, UrlResult } from '@shared/types'
 import {
   ALL_COLUMNS,
@@ -57,7 +57,7 @@ const FILL_YELLOW = 'FFFEF9C3'
 const FILL_GREEN = 'FFDCFCE7'
 const FILL_HEADER = 'FF1E293B'
 
-function styleSheet(ws: ExcelJS.Worksheet, columns: Column[], results: UrlResult[]): void {
+function styleSheet(ws: ExcelJSType.Worksheet, columns: Column[], results: UrlResult[]): void {
   ws.columns = columns.map((c) => ({
     header: c.header,
     key: c.id,
@@ -92,8 +92,10 @@ function styleSheet(ws: ExcelJS.Worksheet, columns: Column[], results: UrlResult
 export async function buildWorkbook(
   results: UrlResult[],
   source: string
-): Promise<ExcelJS.Workbook> {
+): Promise<ExcelJSType.Workbook> {
   const summary = computeSummary(results)
+  // exceljs is large (~600 KB) — load it on demand only when exporting.
+  const ExcelJS = (await import('exceljs')).default
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Site Analyzer'
   wb.created = new Date()

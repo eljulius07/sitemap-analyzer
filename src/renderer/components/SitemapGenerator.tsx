@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import JSZip from 'jszip'
 import {
   DEFAULT_SITEMAP_CONFIG,
   type ChangefreqValue,
@@ -61,6 +60,8 @@ export function SitemapGenerator({ results }: { results: UrlResult[] }): JSX.Ele
     }
     try {
       if (result.files.length > 1) {
+        // jszip is ~100 KB — load it only when needed (sitemap index).
+        const { default: JSZip } = await import('jszip')
         const zip = new JSZip()
         result.files.forEach((f) => zip.file(f.name, f.content))
         const bytes = await zip.generateAsync({ type: 'uint8array' })

@@ -1,7 +1,6 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect, useMemo } from 'react'
 import { initIpcBridge, useStore } from './stores/analysisStore'
 import { initSpiderBridge } from './stores/spiderStore'
-import { useMemo } from 'react'
 import { useResultsView } from './hooks/useAnalysis'
 import { SPIDER_COLUMNS, TAB_COLUMNS } from './results/columns'
 import { TopBar } from './components/TopBar'
@@ -13,11 +12,20 @@ import { GlobalFilters } from './components/GlobalFilters'
 import { FilterBar } from './components/FilterBar'
 import { ResultsTable } from './components/ResultsTable'
 import { ExportMenu } from './components/ExportMenu'
-import { SiteTree } from './components/graph/SiteTree'
-import { SitemapGenerator } from './components/SitemapGenerator'
 import { Settings } from './components/Settings'
 import { RightSidebar } from './components/sidebar/RightSidebar'
 import { subscribeInspection } from './utils/imageInspectorCache'
+
+// Heavy tabs are split into their own chunks — only loaded when the user
+// opens them. SiteTree pulls in d3 (~250 KB) and SitemapGenerator pulls in
+// jszip + a large config tree; loading them on demand keeps the initial
+// renderer bundle small.
+const SiteTree = lazy(() => import('./components/graph/SiteTree').then((m) => ({ default: m.SiteTree })))
+const SitemapGenerator = lazy(() => import('./components/SitemapGenerator').then((m) => ({ default: m.SitemapGenerator })))
+
+function TabLoading(): JSX.Element {
+  return <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Cargando…</div>
+}
 
 function ResultsView(): JSX.Element {
   const crawlState = useStore((s) => s.crawlState)
@@ -75,11 +83,15 @@ function ResultsView(): JSX.Element {
 
             {activeTab === 'graph' ? (
               <div className="flex-1 min-h-0">
-                <SiteTree />
+                <Suspense fallback={<TabLoading />}>
+                  <SiteTree />
+                </Suspense>
               </div>
             ) : activeTab === 'sitemap' ? (
               <div className="flex-1 min-h-0 overflow-auto">
-                <SitemapGenerator results={augmented} />
+                <Suspense fallback={<TabLoading />}>
+                  <SitemapGenerator results={augmented} />
+                </Suspense>
               </div>
             ) : (
               <>

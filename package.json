@@ -26,7 +26,6 @@
     "robots-parser": "^3.0.1"
   },
   "devDependencies": {
-    "@tanstack/react-table": "^8.20.5",
     "@tanstack/react-virtual": "^3.10.8",
     "@types/d3": "^7.4.3",
     "@types/node": "^20.16.11",
