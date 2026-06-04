@@ -1,5 +1,6 @@
 import type { UrlResult } from '@shared/types'
 import type { TabId } from '../stores/analysisStore'
+import { hasHeavyImage } from '../utils/imageInspectorCache'
 
 export interface TabFilter {
   id: string
@@ -50,7 +51,8 @@ export const TAB_FILTERS: Record<TabId, TabFilter[]> = {
     { id: 'img-missing-alt', label: 'Missing Alt Text', test: (r) => !!r.images && r.images.missingAlt > 0 },
     { id: 'img-no-lazy', label: 'No Lazy Loading', test: (r) => !!r.images && r.images.totalImages > 0 && r.images.lazyLoaded === 0 },
     { id: 'img-no-nextgen', label: 'No Next-Gen Formats', test: (r) => !!r.images && r.images.totalImages > 0 && r.images.nextGenFormats === 0 },
-    { id: 'img-missing-dims', label: 'Missing Dimensions', test: (r) => !!r.images && r.images.missingDimensions > 0 }
+    { id: 'img-missing-dims', label: 'Missing Dimensions', test: (r) => !!r.images && r.images.missingDimensions > 0 },
+    { id: 'img-large', label: 'Large Images (>100 KB)', test: (r) => hasHeavyImage(r.url) }
   ],
   links: [
     { id: 'links-broken', label: 'Broken Anchors', test: (r) => !!r.links && r.links.hashOnly > 0 },

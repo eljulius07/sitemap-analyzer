@@ -3,6 +3,7 @@ import {
   IPC,
   type AnalyzeProgress,
   type CrawlSettings,
+  type ImageInspection,
   type ParseSitemapResult,
   type SpiderCompleteEvent,
   type SpiderConfig,
@@ -50,6 +51,12 @@ const api = {
     data: Uint8Array
   ): Promise<{ saved: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke(IPC.exportSaveBinary, { defaultName, data }),
+
+  inspectImages: (
+    urls: string[],
+    opts?: { userAgent?: string; timeoutMs?: number }
+  ): Promise<ImageInspection[]> =>
+    ipcRenderer.invoke(IPC.inspectImages, { urls, ...opts }),
 
   onProgress: (cb: (p: AnalyzeProgress) => void): Unsubscribe =>
     on<AnalyzeProgress>(IPC.analyzeProgress, cb),

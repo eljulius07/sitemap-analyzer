@@ -6,6 +6,11 @@ import {
   type CrawlState,
   type UrlResult
 } from '@shared/types'
+import {
+  clearInspectionCache,
+  getCachedInspection,
+  setCachedInspection
+} from '../utils/imageInspectorCache'
 
 export type View = 'home' | 'results' | 'settings'
 export type Theme = 'dark' | 'light'
@@ -126,6 +131,11 @@ interface AnalysisState {
   sidebarWidth: number
   sidebarTab: SidebarTab
 
+  // bulk image inspection (drives the "Large images" filter pill)
+  imageInspectStatus: 'idle' | 'running' | 'done'
+  imageInspectProgress: { done: number; total: number }
+  imageCacheVersion: number
+
   setView: (view: View) => void
   setInputMode: (mode: InputMode) => void
   setResults: (results: UrlResult[], spider: boolean) => void
@@ -158,6 +168,9 @@ interface AnalysisState {
   setSidebarOpen: (open: boolean) => void
   setSidebarWidth: (w: number) => void
   setSidebarTab: (tab: SidebarTab) => void
+
+  bumpImageCacheVersion: () => void
+  startImageInspection: () => Promise<void>
 
   pushToast: (kind: Toast['kind'], message: string) => void
   dismissToast: (id: number) => void
@@ -202,10 +215,16 @@ export const useStore = create<AnalysisState>((set, get) => ({
   sidebarWidth: loadSidebar().width,
   sidebarTab: loadSidebar().tab,
 
+  imageInspectStatus: 'idle',
+  imageInspectProgress: { done: 0, total: 0 },
+  imageCacheVersion: 0,
+
   setView: (view) => set({ view }),
   setInputMode: (inputMode) => set({ inputMode }),
 
-  setResults: (results, spider) =>
+  setResults: (results, spider) => {
+    // New crawl invalidates any previously inspected images.
+    clearInspectionCache()
     set({
       results,
       spiderActive: spider,
@@ -213,8 +232,11 @@ export const useStore = create<AnalysisState>((set, get) => ({
       activeTab: 'overview',
       selectedUrlId: null,
       crawlState: 'completed',
-      tabFilters: new Set()
-    }),
+      tabFilters: new Set(),
+      imageInspectStatus: 'idle',
+      imageInspectProgress: { done: 0, total: 0 }
+    })
+  },
 
   toggleTheme: () => {
     const theme: Theme = get().theme === 'dark' ? 'light' : 'dark'
@@ -372,6 +394,47 @@ export const useStore = create<AnalysisState>((set, get) => ({
   setSidebarTab: (sidebarTab) => {
     persistSidebar(get().sidebarOpen, get().sidebarWidth, sidebarTab)
     set({ sidebarTab })
+  },
+
+  bumpImageCacheVersion: () => set({ imageCacheVersion: get().imageCacheVersion + 1 }),
+
+  startImageInspection: async () => {
+    if (get().imageInspectStatus === 'running') return
+    const results = get().results
+    const pending = results.filter(
+      (r) =>
+        r.images &&
+        r.images.imageUrls.some((u) => /^https?:\/\//i.test(u)) &&
+        !getCachedInspection(r.url)
+    )
+    if (pending.length === 0) {
+      set({ imageInspectStatus: 'done' })
+      return
+    }
+    set({
+      imageInspectStatus: 'running',
+      imageInspectProgress: { done: 0, total: pending.length }
+    })
+
+    const concurrency = 3
+    let cursor = 0
+    const worker = async (): Promise<void> => {
+      while (true) {
+        const r = pending[cursor++]
+        if (!r) return
+        const httpUrls = (r.images?.imageUrls ?? []).filter((u) => /^https?:\/\//i.test(u))
+        try {
+          const inspection = httpUrls.length > 0 ? await window.api.inspectImages(httpUrls) : []
+          setCachedInspection(r.url, inspection)
+        } catch {
+          setCachedInspection(r.url, [])
+        }
+        const cur = get().imageInspectProgress
+        set({ imageInspectProgress: { done: cur.done + 1, total: cur.total } })
+      }
+    }
+    await Promise.all(Array.from({ length: concurrency }, () => worker()))
+    set({ imageInspectStatus: 'done' })
   },
 
   pushToast: (kind, message) => {

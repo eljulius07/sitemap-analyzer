@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import type { Category, Issue, UrlResult } from '@shared/types'
+import { useEffect, useMemo, useState } from 'react'
+import type { Category, ImageInspection, Issue, UrlResult } from '@shared/types'
 import { useStore } from '../stores/analysisStore'
 import { useAugmentedResults } from '../hooks/useAnalysis'
+import { getCachedInspection, setCachedInspection } from '../utils/imageInspectorCache'
 import {
   CONTENT_COLUMNS,
   IMAGES_COLUMNS,
@@ -114,6 +115,143 @@ function IssueList({ issues }: { issues: Issue[] }): JSX.Element | null {
   )
 }
 
+type InspectState = 'idle' | 'loading' | 'done' | 'error'
+
+function useImageInspection(
+  pageUrl: string,
+  urls: string[]
+): { state: InspectState; data: ImageInspection[]; error: string | null } {
+  const cached = getCachedInspection(pageUrl)
+  const [state, setState] = useState<InspectState>(cached ? 'done' : 'idle')
+  const [data, setData] = useState<ImageInspection[]>(cached ?? [])
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (urls.length === 0) return
+    const existing = getCachedInspection(pageUrl)
+    if (existing) {
+      setData(existing)
+      setState('done')
+      return
+    }
+    let cancelled = false
+    setState('loading')
+    setError(null)
+    window.api
+      .inspectImages(urls)
+      .then((r) => {
+        if (cancelled) return
+        setCachedInspection(pageUrl, r)
+        setData(r)
+        setState('done')
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : String(e))
+        setState('error')
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageUrl])
+
+  return { state, data, error }
+}
+
+function ImagesList({ pageUrl, urls }: { pageUrl: string; urls: string[] }): JSX.Element | null {
+  // Skip inline base64 data: URLs — they're not real network images.
+  const httpUrls = useMemo(() => urls.filter((u) => /^https?:\/\//i.test(u)), [urls])
+  const inlineCount = urls.length - httpUrls.length
+
+  const { state, data, error } = useImageInspection(pageUrl, httpUrls)
+
+  // Sort by size desc; unknown sizes (null) go last.
+  const sorted = useMemo(
+    () =>
+      [...data].sort((a, b) => {
+        const av = a.sizeKb ?? -1
+        const bv = b.sizeKb ?? -1
+        return bv - av
+      }),
+    [data]
+  )
+  const heavyCount = sorted.filter((i) => (i.sizeKb ?? 0) >= 100).length
+
+  if (httpUrls.length === 0 && inlineCount === 0) return null
+
+  return (
+    <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+      <div className="flex items-baseline justify-between mb-2">
+        <h4 className="text-xs uppercase tracking-wide text-slate-400 font-semibold">
+          Imágenes ({httpUrls.length})
+        </h4>
+        <span className="text-[10px] text-slate-400 tabular-nums">
+          {state === 'loading'
+            ? 'analizando…'
+            : state === 'error'
+              ? 'error'
+              : `${heavyCount} > 100 KB`}
+        </span>
+      </div>
+
+      {state === 'error' && <div className="text-xs text-rose-500 mb-2">{error}</div>}
+
+      {inlineCount > 0 && (
+        <div className="text-[10px] text-slate-400 mb-2">
+          + {inlineCount} imagen{inlineCount === 1 ? '' : 'es'} inline (data:base64) omitida
+          {inlineCount === 1 ? '' : 's'} del análisis
+        </div>
+      )}
+
+      {httpUrls.length === 0 ? null : sorted.length === 0 ? (
+        <div className="text-xs text-slate-400">Analizando…</div>
+      ) : (
+        <ul className="space-y-1.5 max-h-96 overflow-auto">
+          {sorted.map((img) => {
+            const isHeavy = (img.sizeKb ?? 0) >= 100
+            return (
+              <li
+                key={img.url}
+                className={`rounded border px-2 py-1.5 ${
+                  isHeavy
+                    ? 'border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-900/15'
+                    : 'border-slate-100 bg-slate-50 dark:border-slate-700/50 dark:bg-slate-900/30'
+                }`}
+              >
+                <a
+                  href={img.url}
+                  title={img.url}
+                  className="text-xs break-all text-brand-500 hover:underline"
+                >
+                  {img.url}
+                </a>
+                <div className="text-[11px] text-slate-500 mt-0.5 tabular-nums flex flex-wrap gap-x-3">
+                  <span className={isHeavy ? 'font-semibold text-amber-600 dark:text-amber-400' : ''}>
+                    {img.sizeKb !== null ? `${img.sizeKb} KB` : '— KB'}
+                  </span>
+                  {img.width !== null && img.height !== null ? (
+                    <span>
+                      {img.width}×{img.height} px
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">— dimensiones</span>
+                  )}
+                  {img.error && (
+                    <span className="text-rose-500" title={img.error}>
+                      · error
+                    </span>
+                  )}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function ArrayBlock({ title, items }: { title: string; items: string[] }): JSX.Element | null {
   if (!items || items.length === 0) return null
   return (
@@ -155,7 +293,7 @@ function CategoryView({ result, category }: { result: UrlResult; category: Categ
         <ArrayBlock title="Raw JSON-LD" items={result.social.rawJsonLd} />
       )}
       {category === 'images' && result.images && (
-        <ArrayBlock title="Image URLs" items={result.images.imageUrls} />
+        <ImagesList pageUrl={result.url} urls={result.images.imageUrls} />
       )}
       {category === 'content' && result.content && (
         <ArrayBlock title="iframe Domains" items={result.content.iframeDomains} />

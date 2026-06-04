@@ -68,6 +68,7 @@ export function useResultsView(): ResultsView {
   const activeTab = useStore((s) => s.activeTab)
   const tabFilters = useStore((s) => s.tabFilters)
   const activeProblem = useStore((s) => s.activeProblem)
+  const imageCacheVersion = useStore((s) => s.imageCacheVersion)
 
   const globalFiltered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -97,7 +98,8 @@ export function useResultsView(): ResultsView {
     const active = TAB_FILTERS[activeTab].filter((f) => tabFilters.has(f.id))
     if (active.length === 0) return globalFiltered
     return globalFiltered.filter((r) => active.every((f) => f.test(r)))
-  }, [globalFiltered, activeTab, tabFilters])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalFiltered, activeTab, tabFilters, imageCacheVersion])
 
   return { augmented, globalFiltered, filtered }
 }

@@ -59,6 +59,17 @@ export interface HttpInfo {
   headers: Record<string, string>
 }
 
+/** Result of a per-image weight + dimension probe (lazy, on demand). */
+export interface ImageInspection {
+  url: string
+  /** Size in KB (1 decimal). null if the server didn't expose it. */
+  sizeKb: number | null
+  /** Actual intrinsic width in pixels (from image header). null if unknown. */
+  width: number | null
+  height: number | null
+  error?: string
+}
+
 /**
  * If the page was reached through one or more HTTP redirects, return the
  * triggering redirect status (e.g. 301/302) and the final destination URL.
@@ -304,6 +315,7 @@ export const IPC = {
   analyzeError: 'analyze:error',
   exportSave: 'export:save',
   exportSaveBinary: 'export:save-binary',
+  inspectImages: 'images:inspect',
   spiderStart: 'spider:start',
   spiderPause: 'spider:pause',
   spiderResume: 'spider:resume',

@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { BrowserWindow, dialog, ipcMain, app } from 'electron'
 import { Crawler } from './crawler'
 import { Spider } from './spider'
+import { inspectImages } from './image-inspector'
 import { parseSitemapFromFile, parseSitemapFromUrl } from './parser'
 import {
   DEFAULT_SETTINGS,
@@ -159,6 +160,14 @@ export function registerIpcHandlers(): void {
     activeSpider?.cancel()
     return { cancelled: true }
   })
+
+  ipcMain.handle(
+    IPC.inspectImages,
+    async (
+      _e,
+      { urls, userAgent, timeoutMs }: { urls: string[]; userAgent?: string; timeoutMs?: number }
+    ) => inspectImages(urls, { userAgent, timeoutMs })
+  )
 
   ipcMain.handle(
     IPC.exportSave,

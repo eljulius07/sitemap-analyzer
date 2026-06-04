@@ -17,6 +17,7 @@ import { SiteTree } from './components/graph/SiteTree'
 import { SitemapGenerator } from './components/SitemapGenerator'
 import { Settings } from './components/Settings'
 import { RightSidebar } from './components/sidebar/RightSidebar'
+import { subscribeInspection } from './utils/imageInspectorCache'
 
 function ResultsView(): JSX.Element {
   const crawlState = useStore((s) => s.crawlState)
@@ -108,9 +109,13 @@ export default function App(): JSX.Element {
   useEffect(() => {
     const unsubAnalysis = initIpcBridge()
     const unsubSpider = initSpiderBridge()
+    const unsubCache = subscribeInspection(() => {
+      useStore.getState().bumpImageCacheVersion()
+    })
     return () => {
       unsubAnalysis()
       unsubSpider()
+      unsubCache()
     }
   }, [])
 
