@@ -1,6 +1,6 @@
 # Site Analyzer
 
-A cross-platform desktop app (macOS · Windows) for **crawling websites and auditing their SEO, performance, content, and technical health** — Screaming Frog–style — then visualizing the site as an interactive tree and generating a custom `sitemap.xml`.
+A cross-platform desktop app (macOS · Windows) for **crawling websites and auditing their SEO, performance, content, and technical health**, then visualizing the site as an interactive tree and generating a custom `sitemap.xml`.
 
 Built with Electron + React + TypeScript. All crawling runs in the Electron main process, so there are **no CORS limits** and **no data ever leaves your machine** (no telemetry, no backend).
 
@@ -45,7 +45,7 @@ Every crawled page is analyzed across seven categories and scored 0–100:
 
 A **weighted health score** combines them (SEO 35 % · Performance 25 % · Content 15 % · Technical 10 % · Social 10 % · Images 5 %) and each finding becomes a **critical / warning** issue. **Redirects are followed and surfaced** in a dedicated column with the redirect status + final destination, and the tree node is marked.
 
-### Results dashboard (Screaming Frog–style)
+### Results dashboard
 - **Slim top bar** (frameless, native window controls): logo + nav (Home / Results / Settings) + active crawl context (`🕷️ Spider: domain.com`) + theme toggle + GitHub link.
 - Category **tabs** (Overview, SEO, Performance, Content, Technical, Social & Schema, Images, Links) over a **virtualized, sortable, resizable-column table**.
 - **Global filters** (status group, severity, health range, text search) + **per-tab filter pills** with live counts.
