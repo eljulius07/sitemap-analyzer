@@ -40,7 +40,7 @@ const THEME_KEY = 'sitemap-analyzer:theme'
 const SIDEBAR_KEY = 'sitemap-analyzer:sidebar'
 
 const SIDEBAR_MIN = 280
-const SIDEBAR_MAX = 500
+const SIDEBAR_MAX = 1200
 const SIDEBAR_DEFAULT = 320
 
 function loadSidebar(): { open: boolean; width: number; tab: SidebarTab } {

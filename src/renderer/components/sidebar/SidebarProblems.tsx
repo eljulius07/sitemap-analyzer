@@ -1,7 +1,24 @@
-import { useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { UrlResult } from '@shared/types'
 import { useStore } from '../../stores/analysisStore'
 import { computeProblems, countBySeverity, type Problem } from '../../results/problems'
+
+const DETAIL_HEIGHT_KEY = 'sitemap-analyzer:problem-detail-height'
+const DETAIL_MIN = 90
+const DETAIL_DEFAULT = 220
+
+function loadDetailHeight(): number {
+  try {
+    const raw = localStorage.getItem(DETAIL_HEIGHT_KEY)
+    if (raw) {
+      const n = Number(raw)
+      if (Number.isFinite(n) && n >= DETAIL_MIN) return n
+    }
+  } catch {
+    /* ignore */
+  }
+  return DETAIL_DEFAULT
+}
 
 const SEV_DOT: Record<Problem['severity'], string> = {
   problem: 'bg-rose-500',
@@ -25,6 +42,9 @@ export function SidebarProblems({ results }: { results: UrlResult[] }): JSX.Elem
   const counts = useMemo(() => countBySeverity(problems), [problems])
   const selected = useMemo(() => problems.find((p) => p.id === selectedId) ?? null, [problems, selectedId])
 
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [detailHeight, setDetailHeight] = useState<number>(loadDetailHeight)
+
   const handleClick = (p: Problem): void => {
     setSelected(p.id)
     setActive({ id: p.id, name: p.name, category: p.category, urls: new Set(p.affectedUrls) })
@@ -33,8 +53,39 @@ export function SidebarProblems({ results }: { results: UrlResult[] }): JSX.Elem
     selectUrl(null)
   }
 
+  /** Drag the bar between the table and the detail panel to resize the detail height. */
+  const startDetailResize = (event: React.MouseEvent): void => {
+    event.preventDefault()
+    const startY = event.clientY
+    const startH = detailHeight
+    const containerH = containerRef.current?.clientHeight ?? 600
+    const maxH = Math.max(DETAIL_MIN + 100, containerH - 140) // leave at least 140px for the table
+    document.body.style.cursor = 'row-resize'
+    document.body.style.userSelect = 'none'
+    const onMove = (e: MouseEvent): void => {
+      const next = Math.max(DETAIL_MIN, Math.min(maxH, startH - (e.clientY - startY)))
+      setDetailHeight(next)
+    }
+    const onUp = (): void => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      setDetailHeight((h) => {
+        try {
+          localStorage.setItem(DETAIL_HEIGHT_KEY, String(h))
+        } catch {
+          /* ignore */
+        }
+        return h
+      })
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+
   return (
-    <div className="h-full flex flex-col min-h-0">
+    <div ref={containerRef} className="h-full flex flex-col min-h-0">
       {/* Counts */}
       <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] shrink-0">
         <span className="whitespace-nowrap">
@@ -102,8 +153,18 @@ export function SidebarProblems({ results }: { results: UrlResult[] }): JSX.Elem
         )}
       </div>
 
-      {/* Selected problem detail */}
-      <div className="shrink-0 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 max-h-[45%] overflow-auto">
+      {/* Drag handle to resize the detail panel */}
+      <div
+        onMouseDown={startDetailResize}
+        title="Drag to resize"
+        className="shrink-0 h-1.5 cursor-row-resize bg-slate-200 dark:bg-slate-700 hover:bg-brand-500/60 transition-colors"
+      />
+
+      {/* Selected problem detail (height set via drag) */}
+      <div
+        className="shrink-0 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 overflow-auto"
+        style={{ height: detailHeight }}
+      >
         {selected ? (
           <div className="p-3 space-y-3">
             <div>
