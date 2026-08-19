@@ -8,6 +8,7 @@ files:
   - package.json
 asar: true
 win:
+  icon: build/icon.png
   target:
     - target: nsis
       arch:
@@ -22,6 +23,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
 mac:
+  icon: build/icon.png
   target:
     - target: dmg
       arch:
