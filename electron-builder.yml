@@ -32,7 +32,12 @@ mac:
   category: public.app-category.developer-tools
   artifactName: ${productName}-${version}-${arch}.${ext}
 dmg:
-  title: ${productName} ${version}
+  # ${arch} is required here. Both the x64 and arm64 DMGs are built in
+  # parallel and each mounts a scratch volume named after this title, so
+  # without the suffix they collide on /Volumes/<title> and the detach of the
+  # second one fails with hdiutil exit code 16. Expands to "" for the default
+  # arch and "-arm64" for the other, matching electron-builder's own default.
+  title: ${productName} ${version}${arch}
 publish:
   provider: github
   releaseType: release
