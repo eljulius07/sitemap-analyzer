@@ -310,6 +310,10 @@ export function SiteTree(): JSX.Element {
     // store positions for next transition
     prev.clear()
     for (const n of nodes) prev.set(n.data.id, { x: n.x, y: n.y })
+    // Deliberately depends on the individual store fields this render reads,
+    // not on the whole `t` store object: `t` changes on every hover, and
+    // re-running the full D3 join on hover would tank the frame rate.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t.tree, t.expandedNodes, t.layoutMode, t.colorMode, t.searchResults, t.selectedNodeId, t.showLinkGraph, selectUrl])
 
   // Fit to view.
@@ -325,7 +329,6 @@ export function SiteTree(): JSX.Element {
     const tx = w / 2 - (bbox.x + bbox.width / 2) * scale
     const ty = h / 2 - (bbox.y + bbox.height / 2) * scale
     d3.select(svgEl).transition().duration(400).call(zoomRef.current.transform, d3.zoomIdentity.translate(tx, ty).scale(scale))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t.fitSignal])
 
   // Zoom to a node.
@@ -341,7 +344,6 @@ export function SiteTree(): JSX.Element {
       .transition()
       .duration(500)
       .call(zoomRef.current.transform, d3.zoomIdentity.translate(w / 2 - pos.x * scale, h / 2 - pos.y * scale).scale(scale))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t.zoomSignal])
 
   if (t.showLinkGraph) {

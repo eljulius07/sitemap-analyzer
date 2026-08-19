@@ -40,7 +40,8 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   setDepthMax: (depthMax) => set({ depthMax }),
   toggleStatus: (s) => {
     const next = new Set(get().showStatus)
-    next.has(s) ? next.delete(s) : next.add(s)
+    if (next.has(s)) next.delete(s)
+    else next.add(s)
     set({ showStatus: next })
   },
   setHealthMin: (healthMin) => set({ healthMin }),
