@@ -38,6 +38,7 @@ export function SitemapGenerator({ results }: { results: UrlResult[] }): JSX.Ele
 
   const eligible = useMemo(() => eligibleUrls(results, config), [results, config])
   const [search, setSearch] = useState('')
+  const withSitemapAlternates = results.filter((r) => (r.sitemap?.alternates.length ?? 0) > 0).length
   const shownManual = useMemo(
     () => eligible.filter((r) => r.url.toLowerCase().includes(search.toLowerCase())).slice(0, 300),
     [eligible, search]
@@ -45,7 +46,8 @@ export function SitemapGenerator({ results }: { results: UrlResult[] }): JSX.Ele
 
   const toggleUrl = (url: string): void => {
     const set = new Set(config.selectedUrls)
-    set.has(url) ? set.delete(url) : set.add(url)
+    if (set.has(url)) set.delete(url)
+    else set.add(url)
     update({ selectedUrls: [...set] })
   }
 
@@ -118,18 +120,45 @@ export function SitemapGenerator({ results }: { results: UrlResult[] }): JSX.Ele
             className="w-28 px-2 py-1 rounded border border-slate-300 bg-white text-sm dark:border-slate-600 dark:bg-slate-900"
           />
         </label>
-        <div className="flex gap-4 text-sm mt-2">
+      </Section>
+
+      <Section title="Exclusions">
+        <div className="text-xs text-slate-500 mb-2">
+          Only 200 responses are eligible — 4xx, 5xx and dead requests never make it in. On top of
+          that:
+        </div>
+        <div className="space-y-1.5 text-sm">
           <label className="flex items-center gap-1.5">
             <input
               type="checkbox"
-              checked={config.includeStatuses.includes(301)}
-              onChange={(e) => update({ includeStatuses: e.target.checked ? [200, 301] : [200] })}
+              checked={config.excludeRedirected}
+              onChange={(e) => update({ excludeRedirected: e.target.checked })}
             />
-            Include 301 targets
+            Drop URLs that redirect (3xx)
           </label>
           <label className="flex items-center gap-1.5">
-            <input type="checkbox" checked={config.includeNonHtml} onChange={(e) => update({ includeNonHtml: e.target.checked })} />
-            Include non-HTML
+            <input
+              type="checkbox"
+              checked={config.excludeDuplicates}
+              onChange={(e) => update({ excludeDuplicates: e.target.checked })}
+            />
+            Drop duplicates (same final destination)
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={config.excludeNonCanonical}
+              onChange={(e) => update({ excludeNonCanonical: e.target.checked })}
+            />
+            Drop URLs canonicalised to another URL
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={config.includeNonHtml}
+              onChange={(e) => update({ includeNonHtml: e.target.checked })}
+            />
+            Include non-HTML resources
           </label>
         </div>
       </Section>
@@ -238,7 +267,11 @@ export function SitemapGenerator({ results }: { results: UrlResult[] }): JSX.Ele
         </Section>
       </div>
 
-      <HreflangConfig value={config.hreflang} onChange={(hreflang) => update({ hreflang })} />
+      <HreflangConfig
+        value={config.hreflang}
+        onChange={(hreflang) => update({ hreflang })}
+        sitemapAlternateCount={withSitemapAlternates}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Section title="Image extension">

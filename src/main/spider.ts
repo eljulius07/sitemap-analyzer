@@ -75,7 +75,8 @@ export class Spider {
   private crawled = 0
   private totalLinks = 0
   private startTime = 0
-  private lastRequestStart = 0
+  /** Earliest timestamp at which the next request may start (crawl-delay). */
+  private nextSlotAt = 0
   private depthCounts: number[] = []
   private status2xx = 0
   private status3xx = 0
@@ -173,11 +174,19 @@ export class Spider {
     return true
   }
 
+  /**
+   * Honour the robots.txt crawl-delay across all workers. Each caller reserves
+   * the next departure slot and advances the marker with no `await` in between,
+   * so N workers queue up one-per-delay instead of all reading the same
+   * timestamp and firing simultaneously.
+   */
   private async throttle(): Promise<void> {
-    if (this.robots.crawlDelayMs <= 0) return
-    const wait = this.robots.crawlDelayMs - (Date.now() - this.lastRequestStart)
-    if (wait > 0) await sleep(wait)
-    this.lastRequestStart = Date.now()
+    const delay = this.robots.crawlDelayMs
+    if (delay <= 0) return
+    const now = Date.now()
+    const slot = Math.max(now, this.nextSlotAt)
+    this.nextSlotAt = slot + delay
+    if (slot > now) await sleep(slot - now)
   }
 
   private async processOne(url: string, depth: number): Promise<void> {

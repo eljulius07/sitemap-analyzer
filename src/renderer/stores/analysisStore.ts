@@ -4,8 +4,11 @@ import {
   type AnalyzeProgress,
   type CrawlSettings,
   type CrawlState,
+  type ParseSitemapResult,
+  type SitemapUrlMeta,
   type UrlResult
 } from '@shared/types'
+import { validateSitemapHreflang } from '@shared/hreflang'
 import {
   clearInspectionCache,
   getCachedInspection,
@@ -107,6 +110,10 @@ interface AnalysisState {
   urls: string[]
   sitemapCount: number
   sitemapSource: string
+  /** hreflang data + validation per `<loc>`, from the parsed sitemap. */
+  sitemapHreflang: Map<string, SitemapUrlMeta>
+  /** How many `<loc>` values the source sitemap repeated. */
+  sitemapDuplicateLocs: number
 
   crawlState: CrawlState
   progress: AnalyzeProgress | null
@@ -182,6 +189,49 @@ let buffer: UrlResult[] = []
 let flushTimer: ReturnType<typeof setInterval> | null = null
 let toastSeq = 1
 
+type SetState = (patch: Partial<AnalysisState>) => void
+type GetState = () => AnalysisState
+
+/**
+ * Land a parse result in the store. hreflang validation happens once, here:
+ * it only depends on the sitemap, so it costs nothing during the crawl and the
+ * resulting map stays referentially stable for the augmentation cache.
+ */
+function applyParse(
+  set: SetState,
+  get: GetState,
+  source: string,
+  res: ParseSitemapResult
+): void {
+  if (res.error) {
+    set({
+      parsing: false,
+      parseError: res.error,
+      urls: [],
+      sitemapCount: 0,
+      sitemapHreflang: new Map(),
+      sitemapDuplicateLocs: 0
+    })
+    get().pushToast('error', res.error)
+    return
+  }
+  set({
+    parsing: false,
+    urls: res.urls,
+    sitemapCount: res.sitemapCount,
+    sitemapSource: source,
+    sitemapHreflang: validateSitemapHreflang(res.entries),
+    sitemapDuplicateLocs: res.duplicateLocs,
+    parseError: res.urls.length === 0 ? 'Sitemap contained no URLs.' : null
+  })
+  if (res.duplicateLocs > 0) {
+    get().pushToast(
+      'info',
+      `Sitemap repeated ${res.duplicateLocs} URL(s) — collapsed to one entry each.`
+    )
+  }
+}
+
 export const useStore = create<AnalysisState>((set, get) => ({
   view: 'home',
   theme: loadTheme(),
@@ -194,6 +244,8 @@ export const useStore = create<AnalysisState>((set, get) => ({
   urls: [],
   sitemapCount: 0,
   sitemapSource: '',
+  sitemapHreflang: new Map(),
+  sitemapDuplicateLocs: 0,
 
   crawlState: 'idle',
   progress: null,
@@ -228,6 +280,7 @@ export const useStore = create<AnalysisState>((set, get) => ({
     set({
       results,
       spiderActive: spider,
+      ...(spider ? { sitemapHreflang: new Map(), sitemapDuplicateLocs: 0 } : {}),
       view: 'results',
       activeTab: 'overview',
       selectedUrlId: null,
@@ -262,40 +315,24 @@ export const useStore = create<AnalysisState>((set, get) => ({
 
   parseFile: async (filePath) => {
     set({ parsing: true, parseError: null })
-    const res = await window.api.parseSitemapFile(filePath, get().settings)
-    if (res.error) {
-      set({ parsing: false, parseError: res.error, urls: [], sitemapCount: 0 })
-      get().pushToast('error', res.error)
-      return
-    }
-    set({
-      parsing: false,
-      urls: res.urls,
-      sitemapCount: res.sitemapCount,
-      sitemapSource: filePath,
-      parseError: res.urls.length === 0 ? 'Sitemap contained no URLs.' : null
-    })
+    applyParse(set, get, filePath, await window.api.parseSitemapFile(filePath, get().settings))
   },
 
   parseUrl: async (url) => {
     set({ parsing: true, parseError: null })
-    const res = await window.api.parseSitemapUrl(url, get().settings)
-    if (res.error) {
-      set({ parsing: false, parseError: res.error, urls: [], sitemapCount: 0 })
-      get().pushToast('error', res.error)
-      return
-    }
-    set({
-      parsing: false,
-      urls: res.urls,
-      sitemapCount: res.sitemapCount,
-      sitemapSource: url,
-      parseError: res.urls.length === 0 ? 'Sitemap contained no URLs.' : null
-    })
+    applyParse(set, get, url, await window.api.parseSitemapUrl(url, get().settings))
   },
 
   clearSitemap: () =>
-    set({ urls: [], sitemapCount: 0, parseError: null, results: [], progress: null }),
+    set({
+      urls: [],
+      sitemapCount: 0,
+      sitemapHreflang: new Map(),
+      sitemapDuplicateLocs: 0,
+      parseError: null,
+      results: [],
+      progress: null
+    }),
 
   startAnalysis: async () => {
     const { urls, settings } = get()
@@ -349,13 +386,15 @@ export const useStore = create<AnalysisState>((set, get) => ({
 
   toggleStatusGroup: (g) => {
     const next = new Set(get().statusGroups)
-    next.has(g) ? next.delete(g) : next.add(g)
+    if (next.has(g)) next.delete(g)
+    else next.add(g)
     set({ statusGroups: next })
   },
 
   toggleSeverity: (s) => {
     const next = new Set(get().severities)
-    next.has(s) ? next.delete(s) : next.add(s)
+    if (next.has(s)) next.delete(s)
+    else next.add(s)
     set({ severities: next })
   },
 
@@ -363,7 +402,8 @@ export const useStore = create<AnalysisState>((set, get) => ({
 
   toggleTabFilter: (id) => {
     const next = new Set(get().tabFilters)
-    next.has(id) ? next.delete(id) : next.add(id)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
     set({ tabFilters: next })
   },
 

@@ -4,10 +4,13 @@ type Hreflang = SitemapConfig['hreflang']
 
 export function HreflangConfig({
   value,
-  onChange
+  onChange,
+  sitemapAlternateCount = 0
 }: {
   value: Hreflang
   onChange: (h: Hreflang) => void
+  /** How many crawled URLs carried alternates in the source sitemap. */
+  sitemapAlternateCount?: number
 }): JSX.Element {
   const update = (patch: Partial<Hreflang>): void => onChange({ ...value, ...patch })
 
@@ -22,6 +25,12 @@ export function HreflangConfig({
         Alternate language tags (hreflang)
         <input type="checkbox" checked={value.enabled} onChange={(e) => update({ enabled: e.target.checked })} />
       </label>
+      {!value.enabled && sitemapAlternateCount > 0 && (
+        <div className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+          The source sitemap declared alternates for {sitemapAlternateCount} URL(s) — enable this to
+          carry them over.
+        </div>
+      )}
 
       {value.enabled && (
         <div className="mt-3 space-y-3">
@@ -35,6 +44,41 @@ export function HreflangConfig({
               Manual mapping
             </label>
           </div>
+
+          {value.mode === 'auto-detect' && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-4 text-sm">
+                {(
+                  [
+                    ['both', 'Page + sitemap'],
+                    ['page', 'Page tags only'],
+                    ['sitemap', 'Sitemap only']
+                  ] as const
+                ).map(([id, label]) => (
+                  <label key={id} className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      checked={value.source === id}
+                      onChange={() => update({ source: id })}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <div className="text-xs text-slate-500">
+                With both sources, the page&apos;s own tags win per language code and the sitemap
+                fills in the languages the HTML never declared.
+              </div>
+              <label className="flex items-center gap-1.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={value.pruneExcluded}
+                  onChange={(e) => update({ pruneExcluded: e.target.checked })}
+                />
+                Drop alternates whose target was excluded
+              </label>
+            </div>
+          )}
 
           {value.mode === 'manual-mapping' && (
             <div className="space-y-2">

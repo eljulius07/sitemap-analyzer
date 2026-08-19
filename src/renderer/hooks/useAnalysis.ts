@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { evaluateResult } from '@shared/scoring'
-import type { UrlResult } from '@shared/types'
+import type { SitemapUrlMeta, UrlResult } from '@shared/types'
 import { useStore, type StatusGroup } from '../stores/analysisStore'
 import { TAB_FILTERS } from '../results/filters'
 
@@ -12,9 +12,27 @@ function statusGroupOf(code: number | null): StatusGroup {
   return '2xx'
 }
 
+interface AugmentedEntry {
+  duplicateTitle: boolean
+  duplicateDescription: boolean
+  sitemapMeta: SitemapUrlMeta | undefined
+  value: UrlResult
+}
+
+/**
+ * Per-result cache for the duplicate-aware re-evaluation. `evaluateResult` runs
+ * ~40 rules and this hook re-fires on every ingest flush (every 200 ms while a
+ * crawl streams in), so uncached a 10k-URL crawl re-scores every row dozens of
+ * times. Keyed by the raw result object — the store only ever appends, so those
+ * references are stable — and invalidated when either duplicate flag flips.
+ * Reusing the entry also keeps row references stable for the virtualized table.
+ */
+const augmentedCache = new WeakMap<UrlResult, AugmentedEntry>()
+
 /** Re-evaluate every result with cross-URL duplicate context applied. */
 export function useAugmentedResults(): UrlResult[] {
   const results = useStore((s) => s.results)
+  const sitemapHreflang = useStore((s) => s.sitemapHreflang)
   return useMemo(() => {
     const titleCount = new Map<string, number>()
     const descCount = new Map<string, number>()
@@ -27,13 +45,32 @@ export function useAugmentedResults(): UrlResult[] {
     return results.map((r) => {
       const t = r.seo?.title.trim().toLowerCase()
       const d = r.seo?.metaDescription.trim().toLowerCase()
-      const ctx = {
-        duplicateTitle: !!t && (titleCount.get(t) ?? 0) > 1,
-        duplicateDescription: !!d && (descCount.get(d) ?? 0) > 1
+      const duplicateTitle = !!t && (titleCount.get(t) ?? 0) > 1
+      const duplicateDescription = !!d && (descCount.get(d) ?? 0) > 1
+
+      // The sitemap map is rebuilt only on parse, so this stays a reference
+      // compare and the cache survives every ingest flush.
+      const sitemapMeta = sitemapHreflang.get(r.url)
+
+      const cached = augmentedCache.get(r)
+      if (
+        cached &&
+        cached.duplicateTitle === duplicateTitle &&
+        cached.duplicateDescription === duplicateDescription &&
+        cached.sitemapMeta === sitemapMeta
+      ) {
+        return cached.value
       }
-      return { ...r, ...evaluateResult(r, ctx) }
+
+      const value: UrlResult = {
+        ...r,
+        ...evaluateResult(r, { duplicateTitle, duplicateDescription }),
+        ...(sitemapMeta ? { sitemap: sitemapMeta } : {})
+      }
+      augmentedCache.set(r, { duplicateTitle, duplicateDescription, sitemapMeta, value })
+      return value
     })
-  }, [results])
+  }, [results, sitemapHreflang])
 }
 
 function matchesSearch(r: UrlResult, q: string): boolean {

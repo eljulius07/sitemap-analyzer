@@ -1,5 +1,6 @@
 import { minimatch } from 'minimatch'
-import type { ChangefreqValue, SitemapConfig, UrlResult } from '@shared/types'
+import { redirectInfo, type ChangefreqValue, type SitemapAlternate, type SitemapConfig, type UrlResult } from '@shared/types'
+import { alternateKey } from '@shared/hreflang'
 
 export interface SitemapFile {
   name: string
@@ -100,19 +101,37 @@ function computePriority(r: UrlResult, config: SitemapConfig): string | null {
   return p.toFixed(1)
 }
 
-function hreflangAlternates(
-  r: UrlResult,
-  config: SitemapConfig
-): { lang: string; href: string }[] {
+/**
+ * Merge alternate sources, first writer per language code wins. With
+ * `source: 'both'` that means the page's own tags take precedence and the
+ * sitemap only fills in languages the HTML never declared.
+ */
+function autoAlternates(r: UrlResult, source: SitemapConfig['hreflang']['source']): SitemapAlternate[] {
+  const out: SitemapAlternate[] = []
+  const seen = new Set<string>()
+  const add = (list: SitemapAlternate[]): void => {
+    for (const alt of list) {
+      const lang = alt.lang.trim().toLowerCase()
+      if (!lang || !alt.href || seen.has(lang)) continue
+      seen.add(lang)
+      out.push(alt)
+    }
+  }
+  if (source !== 'sitemap') add(r.seo?.hreflangLinks ?? [])
+  if (source !== 'page') add(r.sitemap?.alternates ?? [])
+  return out
+}
+
+function hreflangAlternates(r: UrlResult, config: SitemapConfig): SitemapAlternate[] {
   if (!config.hreflang.enabled) return []
   if (config.hreflang.mode === 'auto-detect') {
-    return r.seo?.hreflangLinks ?? []
+    return autoAlternates(r, config.hreflang.source)
   }
   // manual-mapping: markers swapped in the URL path
   const mappings = config.hreflang.mappings
   const current = mappings.find((m) => r.url.includes(m.pattern))
   if (!current) return []
-  const out: { lang: string; href: string }[] = []
+  const out: SitemapAlternate[] = []
   for (const m of mappings) {
     out.push({ lang: m.lang, href: r.url.split(current.pattern).join(m.pattern) })
   }
@@ -123,23 +142,107 @@ function hreflangAlternates(
   return out
 }
 
-function isEligible(r: UrlResult, config: SitemapConfig): boolean {
-  if (r.spider?.isExternal) return false
-  const code = r.http.statusCode
-  if (code === null) return false
-  if (!config.includeStatuses.includes(code)) {
-    // allow redirect-resolved 200s when "include 301 targets" adds 301
-    if (!(config.includeStatuses.includes(301) && r.http.redirectChain.length > 0)) return false
-  }
-  if (!config.includeNonHtml && r.seo === null) return false
-  if (!config.includeAll && !config.selectedUrls.includes(r.url)) return false
-  const path = pathOf(r.url)
-  if (config.excludePatterns.length && matchesAny(path, config.excludePatterns)) return false
-  if (config.includePatterns.length && !matchesAny(path, config.includePatterns)) return false
-  return true
+/** Why a crawled URL did not make it into the generated sitemap. */
+type Rejection = 'filtered' | 'status' | 'redirected' | 'non-canonical' | 'duplicate'
+
+export interface SelectionStats {
+  status: number
+  redirected: number
+  nonCanonical: number
+  duplicate: number
 }
 
-function buildUrlEntry(r: UrlResult, config: SitemapConfig): string {
+/** The URL a request actually ended on, after following any redirects. */
+function destinationOf(r: UrlResult): string {
+  return redirectInfo(r.http)?.target ?? r.url
+}
+
+function rejectionFor(
+  r: UrlResult,
+  config: SitemapConfig,
+  seenDestinations: Set<string>
+): Rejection | null {
+  if (r.spider?.isExternal) return 'filtered'
+
+  const code = r.http.statusCode
+  // A crawl error or a 4xx/5xx: never worth advertising in a sitemap.
+  if (code === null || !config.includeStatuses.includes(code)) return 'status'
+
+  // Redirect chains survive as a 200 (the crawler follows them), so this has
+  // to key off the chain rather than the final status code.
+  if (config.excludeRedirected && r.http.redirectChain.length > 0) return 'redirected'
+
+  if (config.excludeNonCanonical && r.seo?.canonicalStatus === 'other') return 'non-canonical'
+
+  if (!config.includeNonHtml && r.seo === null) return 'filtered'
+  if (!config.includeAll && !config.selectedUrls.includes(r.url)) return 'filtered'
+  const path = pathOf(r.url)
+  if (config.excludePatterns.length && matchesAny(path, config.excludePatterns)) return 'filtered'
+  if (config.includePatterns.length && !matchesAny(path, config.includePatterns)) return 'filtered'
+
+  if (config.excludeDuplicates) {
+    const destination = alternateKey(destinationOf(r))
+    if (seenDestinations.has(destination)) return 'duplicate'
+    seenDestinations.add(destination)
+  }
+
+  return null
+}
+
+/** Run every result through the exclusion rules, tallying why each was cut. */
+export function selectEntries(
+  results: UrlResult[],
+  config: SitemapConfig
+): { included: UrlResult[]; stats: SelectionStats } {
+  const stats: SelectionStats = { status: 0, redirected: 0, nonCanonical: 0, duplicate: 0 }
+  const seenDestinations = new Set<string>()
+  const included: UrlResult[] = []
+
+  for (const r of results) {
+    const rejection = rejectionFor(r, config, seenDestinations)
+    if (rejection === null) {
+      included.push(r)
+      continue
+    }
+    if (rejection === 'status') stats.status++
+    else if (rejection === 'redirected') stats.redirected++
+    else if (rejection === 'non-canonical') stats.nonCanonical++
+    else if (rejection === 'duplicate') stats.duplicate++
+  }
+
+  return { included, stats }
+}
+
+type AlternateMap = Map<string, SitemapAlternate[]>
+
+/**
+ * Resolve the alternates every included URL will advertise, dropping any whose
+ * target was excluded — otherwise the fresh sitemap would point hreflang at the
+ * very 404s and redirects we just filtered out.
+ */
+function resolveAlternates(
+  included: UrlResult[],
+  config: SitemapConfig
+): { byUrl: AlternateMap; pruned: number } {
+  const byUrl: AlternateMap = new Map()
+  if (!config.hreflang.enabled) return { byUrl, pruned: 0 }
+
+  const survivors = new Set(included.map((r) => alternateKey(r.url)))
+  let pruned = 0
+
+  for (const r of included) {
+    const all = hreflangAlternates(r, config)
+    const kept = config.hreflang.pruneExcluded
+      ? all.filter((a) => survivors.has(alternateKey(a.href)))
+      : all
+    pruned += all.length - kept.length
+    if (kept.length > 0) byUrl.set(r.url, kept)
+  }
+
+  return { byUrl, pruned }
+}
+
+function buildUrlEntry(r: UrlResult, config: SitemapConfig, alternates: AlternateMap): string {
   const parts = [`  <url>`, `    <loc>${xmlEscape(r.url)}</loc>`]
   const lastmod = computeLastmod(r, config)
   if (lastmod) parts.push(`    <lastmod>${lastmod}</lastmod>`)
@@ -148,7 +251,7 @@ function buildUrlEntry(r: UrlResult, config: SitemapConfig): string {
   const pr = computePriority(r, config)
   if (pr) parts.push(`    <priority>${pr}</priority>`)
 
-  for (const alt of hreflangAlternates(r, config)) {
+  for (const alt of alternates.get(r.url) ?? []) {
     parts.push(
       `    <xhtml:link rel="alternate" hreflang="${xmlEscape(alt.lang)}" href="${xmlEscape(alt.href)}"/>`
     )
@@ -182,8 +285,8 @@ function namespaces(config: SitemapConfig): string {
   return ns.join('\n        ')
 }
 
-function buildUrlsetFile(urls: UrlResult[], config: SitemapConfig): string {
-  const body = urls.map((r) => buildUrlEntry(r, config)).join('\n')
+function buildUrlsetFile(urls: UrlResult[], config: SitemapConfig, alternates: AlternateMap): string {
+  const body = urls.map((r) => buildUrlEntry(r, config, alternates)).join('\n')
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset ${namespaces(config)}>\n${body}\n</urlset>\n`
 }
 
@@ -199,9 +302,16 @@ function buildIndexFile(fileNames: string[], origin: string): string {
 }
 
 export function generateSitemap(results: UrlResult[], config: SitemapConfig): SitemapResult {
-  const eligible = results.filter((r) => isEligible(r, config))
+  const { included: eligible, stats } = selectEntries(results, config)
+  const { byUrl: alternates, pruned } = resolveAlternates(eligible, config)
+
   const warnings: string[] = []
   if (eligible.length === 0) warnings.push('No URLs match the current selection.')
+  if (stats.status > 0) warnings.push(`${stats.status} URL(s) excluded — error or non-allowed status.`)
+  if (stats.redirected > 0) warnings.push(`${stats.redirected} URL(s) excluded — they redirect elsewhere.`)
+  if (stats.nonCanonical > 0) warnings.push(`${stats.nonCanonical} URL(s) excluded — canonical points to another URL.`)
+  if (stats.duplicate > 0) warnings.push(`${stats.duplicate} duplicate URL(s) collapsed to one entry.`)
+  if (pruned > 0) warnings.push(`${pruned} hreflang alternate(s) dropped — target is not in the new sitemap.`)
   const longUrls = eligible.filter((r) => r.url.length > 2048).length
   if (longUrls > 0) warnings.push(`${longUrls} URL(s) exceed 2048 characters.`)
 
@@ -221,7 +331,7 @@ export function generateSitemap(results: UrlResult[], config: SitemapConfig): Si
 
   if (!needsIndex) {
     return {
-      files: [{ name: `${baseName}.xml`, content: buildUrlsetFile(eligible, config) }],
+      files: [{ name: `${baseName}.xml`, content: buildUrlsetFile(eligible, config, alternates) }],
       urlCount: eligible.length,
       warnings,
       isIndex: false
@@ -235,7 +345,7 @@ export function generateSitemap(results: UrlResult[], config: SitemapConfig): Si
     const chunk = eligible.slice(i, i + perFile)
     const name = `${baseName}-${files.length + 1}.xml`
     chunkNames.push(name)
-    files.push({ name, content: buildUrlsetFile(chunk, config) })
+    files.push({ name, content: buildUrlsetFile(chunk, config, alternates) })
   }
   files.unshift({ name: `${baseName}-index.xml`, content: buildIndexFile(chunkNames, origin) })
 
@@ -244,5 +354,5 @@ export function generateSitemap(results: UrlResult[], config: SitemapConfig): Si
 
 /** Eligible URL list for the manual selection UI. */
 export function eligibleUrls(results: UrlResult[], config: SitemapConfig): UrlResult[] {
-  return results.filter((r) => isEligible(r, { ...config, includeAll: true }))
+  return selectEntries(results, { ...config, includeAll: true }).included
 }

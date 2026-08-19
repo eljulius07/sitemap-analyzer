@@ -87,7 +87,11 @@ export const SEO_COLUMNS: Column[] = [
   { id: 'htmlLang', header: 'Lang', size: 70, get: (r) => r.seo?.htmlLang ?? null, flag: (r) => (r.seo && !r.seo.htmlLang ? 'warning' : null) },
   { id: 'hreflang', header: 'Hreflang', size: 140, get: (r) => r.seo?.hreflang ?? null },
   { id: 'hreflangCount', header: 'Hreflang#', size: 90, align: 'right', get: (r) => r.seo?.hreflangCount ?? null },
-  { id: 'hreflangSelf', header: 'Hreflang Self', size: 110, align: 'center', get: (r) => r.seo?.hreflangSelfReference ?? null, flag: (r) => (r.seo && r.seo.hreflangCount > 0 && !r.seo.hreflangSelfReference ? 'warning' : null) }
+  { id: 'hreflangSelf', header: 'Hreflang Self', size: 110, align: 'center', get: (r) => r.seo?.hreflangSelfReference ?? null, flag: (r) => (r.seo && r.seo.hreflangCount > 0 && !r.seo.hreflangSelfReference ? 'warning' : null) },
+  // Declared in the source sitemap rather than in the page's HTML.
+  { id: 'sitemapAltCount', header: 'Sitemap Alt#', size: 100, align: 'right', get: (r) => r.sitemap?.alternates.length ?? null },
+  { id: 'sitemapAltLangs', header: 'Sitemap Alt', size: 160, get: (r) => r.sitemap?.alternates.map((a) => a.lang) ?? null },
+  { id: 'sitemapHreflangIssues', header: 'Alt Issues', size: 100, align: 'right', get: (r) => r.sitemap?.hreflangIssues.length ?? null, flag: (r) => (r.sitemap && r.sitemap.hreflangIssues.length > 0 ? 'critical' : null) }
 ]
 
 export const PERF_COLUMNS: Column[] = [

@@ -270,6 +270,43 @@ function ArrayBlock({ title, items }: { title: string; items: string[] }): JSX.E
   )
 }
 
+/** hreflang alternates the source sitemap declared for this URL, plus findings. */
+function SitemapAlternates({ result }: { result: UrlResult }): JSX.Element | null {
+  const meta = result.sitemap
+  if (!meta || (meta.alternates.length === 0 && meta.hreflangIssues.length === 0)) return null
+  return (
+    <div className="mt-3">
+      <h4 className="text-xs uppercase tracking-wide text-slate-400 font-semibold mb-1">
+        Alternates del sitemap ({meta.alternates.length})
+      </h4>
+      {meta.hreflangIssues.length > 0 && (
+        <ul className="mb-2 space-y-1">
+          {meta.hreflangIssues.map((i, idx) => (
+            <li
+              key={`${i.code}-${idx}`}
+              className="text-[11px] rounded px-2 py-1 bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300"
+            >
+              {i.message}
+            </li>
+          ))}
+        </ul>
+      )}
+      <ul className="space-y-1">
+        {meta.alternates.map((a) => (
+          <li key={`${a.lang}-${a.href}`} className="flex gap-2 text-xs">
+            <span className="shrink-0 font-mono text-slate-500 w-20 truncate" title={a.lang}>
+              {a.lang}
+            </span>
+            <a href={a.href} title={a.href} className="break-all text-brand-500 hover:underline">
+              {a.href}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function CategoryView({ result, category }: { result: UrlResult; category: Category }): JSX.Element {
   const cols = CATEGORY_COLUMNS[category]
   const issues = result.issues.filter((i) => i.category === category)
@@ -301,6 +338,7 @@ function CategoryView({ result, category }: { result: UrlResult; category: Categ
       {category === 'links' && result.links && (
         <ArrayBlock title="External Domains" items={result.links.externalDomains} />
       )}
+      {category === 'seo' && <SitemapAlternates result={result} />}
     </div>
   )
 }

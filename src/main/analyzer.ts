@@ -60,6 +60,24 @@ function round(n: number, dp = 0): number {
   return Math.round(n * f) / f
 }
 
+/**
+ * Returns the most-recent PAST year (2000-2099) mentioned in `text`, or null
+ * if no past year appears. Used to detect stale "Mejores X 2025"-style titles.
+ */
+function detectOutdatedYear(text: string): number | null {
+  if (!text) return null
+  const currentYear = new Date().getFullYear()
+  const matches = text.match(/\b(20\d{2})\b/g)
+  if (!matches) return null
+  let maxPast: number | null = null
+  for (const raw of matches) {
+    const y = Number(raw)
+    if (y < 2000 || y > 2099) continue
+    if (y < currentYear && (maxPast === null || y > maxPast)) maxPast = y
+  }
+  return maxPast
+}
+
 function analyzeSeo($: CheerioAPI, pageUrl: string, http: HttpInfo): SeoAnalysis {
   const title = $('head > title').first().text().trim()
   const metaDescription = $('meta[name="description"]').attr('content')?.trim() ?? ''
@@ -92,7 +110,11 @@ function analyzeSeo($: CheerioAPI, pageUrl: string, http: HttpInfo): SeoAnalysis
   }
 
   const noindex = /noindex/i.test(metaRobots) || /noindex/i.test(xRobotsTag)
-  const isIndexable = !noindex && canonicalStatus !== 'missing' && http.statusCode === 200
+  // A missing canonical does NOT block indexing — engines index such pages
+  // fine. What does block it: a noindex directive, a non-200 status, or a
+  // canonical pointing elsewhere (the page is canonicalised away, so the other
+  // URL is the one that gets indexed).
+  const isIndexable = !noindex && http.statusCode === 200 && canonicalStatus !== 'other'
 
   const u = (() => {
     try {
@@ -148,7 +170,9 @@ function analyzeSeo($: CheerioAPI, pageUrl: string, http: HttpInfo): SeoAnalysis
     hreflang,
     hreflangLinks,
     hreflangCount: hreflang.length,
-    hreflangSelfReference: hreflang.length > 0 ? hreflangSelfReference : false
+    hreflangSelfReference: hreflang.length > 0 ? hreflangSelfReference : false,
+    outdatedYearInTitle: detectOutdatedYear(title),
+    outdatedYearInMetaDescription: detectOutdatedYear(metaDescription)
   }
 }
 

@@ -116,6 +116,10 @@ export interface SeoAnalysis {
   hreflangLinks: { lang: string; href: string }[]
   hreflangCount: number
   hreflangSelfReference: boolean
+  /** Most-recent past year (e.g. 2025) mentioned in the title, or null. */
+  outdatedYearInTitle: number | null
+  /** Most-recent past year mentioned in the meta description, or null. */
+  outdatedYearInMetaDescription: number | null
 }
 
 export interface PerformanceAnalysis {
@@ -231,16 +235,22 @@ export interface CategoryScores {
   technical: number
   social: number
   images: number
+  links: number
 }
 
-/** Relative weights applied to category scores to form the health score. */
+/**
+ * Relative weights applied to category scores to form the health score.
+ * Must sum to 1. Link hygiene used to be folded into the SEO bucket without
+ * ever being scored; it now carries 5 points of its own, taken out of SEO.
+ */
 export const HEALTH_WEIGHTS: CategoryScores = {
-  seo: 0.35,
+  seo: 0.3,
   performance: 0.25,
   content: 0.15,
   technical: 0.1,
   social: 0.1,
-  images: 0.05
+  images: 0.05,
+  links: 0.05
 }
 
 export type RowStatus = 'ok' | 'warning' | 'error'
@@ -283,6 +293,8 @@ export interface UrlResult {
   error: string | null
   /** Present only for pages discovered via Spider Mode. */
   spider?: SpiderMeta
+  /** Present only for pages loaded from a sitemap that declared alternates. */
+  sitemap?: SitemapUrlMeta
 }
 
 export interface AnalyzeProgress {
@@ -294,9 +306,47 @@ export interface AnalyzeProgress {
   etaMs: number | null
 }
 
+/** One `<xhtml:link rel="alternate">` declared for a sitemap `<url>` entry. */
+export interface SitemapAlternate {
+  lang: string
+  href: string
+}
+
+/** A `<url>` entry exactly as declared in the source sitemap. */
+export interface SitemapUrlEntry {
+  loc: string
+  alternates: SitemapAlternate[]
+}
+
+export type HreflangIssueCode =
+  | 'missing-self-reference'
+  | 'missing-return-link'
+  | 'alternate-not-in-sitemap'
+  | 'duplicate-hreflang'
+  | 'invalid-hreflang-code'
+
+export interface HreflangIssue {
+  code: HreflangIssueCode
+  message: string
+  lang: string
+  href: string
+}
+
+/** Data carried over from the source sitemap. Present in Sitemap Mode only. */
+export interface SitemapUrlMeta {
+  /** hreflang alternates the sitemap declares for this URL. */
+  alternates: SitemapAlternate[]
+  /** Findings from validating this URL's alternate set against the sitemap. */
+  hreflangIssues: HreflangIssue[]
+}
+
 export interface ParseSitemapResult {
   urls: string[]
   sitemapCount: number
+  /** One entry per unique `<loc>`, in document order, with its alternates. */
+  entries: SitemapUrlEntry[]
+  /** How many `<loc>` values appeared more than once and were collapsed. */
+  duplicateLocs: number
   error?: string
 }
 
@@ -440,7 +490,14 @@ export type ChangefreqValue =
 export interface SitemapConfig {
   format: 'xml' | 'xml-index' | 'txt'
   maxUrlsPerFile: number
+  /** Final HTTP statuses allowed into the sitemap. Anything else is dropped. */
   includeStatuses: number[]
+  /** Drop URLs reached through a 3xx — their `<loc>` is already stale. */
+  excludeRedirected: boolean
+  /** Keep one entry per final destination when several URLs resolve to it. */
+  excludeDuplicates: boolean
+  /** Drop URLs whose canonical points at a different URL. */
+  excludeNonCanonical: boolean
   includeNonHtml: boolean
   includeAll: boolean
   selectedUrls: string[]
@@ -458,6 +515,14 @@ export interface SitemapConfig {
   hreflang: {
     enabled: boolean
     mode: 'auto-detect' | 'manual-mapping'
+    /**
+     * auto-detect only. `page` uses the `<link rel="alternate">` tags found in
+     * the HTML, `sitemap` uses what the source sitemap declared, `both` merges
+     * them with the page winning per language code.
+     */
+    source: 'page' | 'sitemap' | 'both'
+    /** Drop alternates whose target did not make it into the new sitemap. */
+    pruneExcluded: boolean
     mappings: { lang: string; pattern: string; replacement: string }[]
     xDefault: string
   }
@@ -477,6 +542,9 @@ export const DEFAULT_SITEMAP_CONFIG: SitemapConfig = {
   format: 'xml',
   maxUrlsPerFile: 50000,
   includeStatuses: [200],
+  excludeRedirected: true,
+  excludeDuplicates: true,
+  excludeNonCanonical: false,
   includeNonHtml: false,
   includeAll: true,
   selectedUrls: [],
@@ -491,7 +559,14 @@ export const DEFAULT_SITEMAP_CONFIG: SitemapConfig = {
   priority: 'auto-calculate',
   uniformPriority: 0.5,
   priorityOverrides: [],
-  hreflang: { enabled: false, mode: 'auto-detect', mappings: [], xDefault: '' },
+  hreflang: {
+    enabled: false,
+    mode: 'auto-detect',
+    source: 'both',
+    pruneExcluded: true,
+    mappings: [],
+    xDefault: ''
+  },
   imageSitemap: { enabled: false, maxPerUrl: 100 },
   videoSitemap: { enabled: false },
   newsSitemap: { enabled: false, urlPatterns: [], publicationName: '', language: 'en' },

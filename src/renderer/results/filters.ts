@@ -22,7 +22,10 @@ export const TAB_FILTERS: Record<TabId, TabFilter[]> = {
     { id: 'seo-missing-canonical', label: 'Missing Canonical', test: (r) => !!r.seo && r.seo.canonicalStatus === 'missing' },
     { id: 'seo-dup-title', label: 'Duplicate Titles', test: hasIssue('duplicateTitle') },
     { id: 'seo-dup-desc', label: 'Duplicate Descriptions', test: hasIssue('duplicateDescription') },
-    { id: 'seo-not-indexable', label: 'Not Indexable', test: (r) => !!r.seo && !r.seo.isIndexable }
+    { id: 'seo-not-indexable', label: 'Not Indexable', test: (r) => !!r.seo && !r.seo.isIndexable },
+    { id: 'seo-outdated-year', label: 'Outdated Year', test: (r) => !!r.seo && r.seo.outdatedYearInTitle !== null },
+    { id: 'seo-sitemap-hreflang', label: 'Sitemap hreflang Issues', test: (r) => !!r.sitemap && r.sitemap.hreflangIssues.length > 0 },
+    { id: 'seo-sitemap-alt', label: 'Has Sitemap Alternates', test: (r) => !!r.sitemap && r.sitemap.alternates.length > 0 }
   ],
   performance: [
     { id: 'perf-slow-ttfb', label: 'Slow TTFB (>800ms)', test: (r) => !!r.performance && r.performance.ttfbMs > 800 },
