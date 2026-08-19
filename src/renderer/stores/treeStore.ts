@@ -64,7 +64,8 @@ export const useTreeStore = create<TreeStore>((set, get) => ({
 
   toggleExpand: (id) => {
     const next = new Set(get().expandedNodes)
-    next.has(id) ? next.delete(id) : next.add(id)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
     set({ expandedNodes: next })
   },
 

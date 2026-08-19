@@ -1,4 +1,4 @@
-import type { UrlResult } from '@shared/types'
+import type { HreflangIssueCode, UrlResult } from '@shared/types'
 import type { TabId } from '../stores/analysisStore'
 
 export type ProblemSeverity = 'problem' | 'warning' | 'opportunity'
@@ -23,6 +23,12 @@ export interface Problem extends Omit<ProblemDef, 'check'> {
 }
 
 const hasIssue = (field: string) => (r: UrlResult): boolean => r.issues.some((i) => i.field === field)
+
+/** Matches a finding from validating the source sitemap's hreflang clusters. */
+const hasHreflangIssue =
+  (code: HreflangIssueCode) =>
+  (r: UrlResult): boolean =>
+    !!r.sitemap && r.sitemap.hreflangIssues.some((i) => i.code === code)
 
 export const PROBLEM_DEFS: ProblemDef[] = [
   // ----- SEO Problems (critical) -----
@@ -135,6 +141,43 @@ export const PROBLEM_DEFS: ProblemDef[] = [
     description: 'La página salta niveles de encabezados (ej. H1 → H3 sin H2). La jerarquía correcta favorece accesibilidad y comprensión.',
     howToFix: 'Asegúrate de que los encabezados sigan el orden H1 → H2 → H3 sin saltar niveles.',
     check: (r) => !!r.seo && !r.seo.headingHierarchyValid },
+  { id: 'title-outdated-year', severity: 'warning', priority: 'medium', category: 'seo',
+    name: 'Títulos de página: Año desactualizado',
+    description: 'Páginas cuyo <title> incluye un año anterior al actual (por ejemplo "Mejores X 2025" cuando ya estamos en 2026). Suele ser contenido evergreen al que olvidaron actualizarle la fecha — pierde clicks y señales de frescura en los SERP.',
+    howToFix: 'Actualiza el título reemplazando el año por el actual y refresca el contenido. Si la página es histórica (no evergreen), considera quitar el año del title o moverlo al subtítulo.',
+    check: (r) => !!r.seo && r.seo.outdatedYearInTitle !== null },
+  { id: 'meta-desc-outdated-year', severity: 'opportunity', priority: 'low', category: 'seo',
+    name: 'Meta description: Año desactualizado',
+    description: 'Meta descriptions con un año anterior al actual. Aunque tiene menos peso que el title, mantenerla actualizada mejora el CTR y la percepción de frescura.',
+    howToFix: 'Actualiza la meta description con el año actual o quítale la referencia temporal si la página es atemporal.',
+    check: (r) => !!r.seo && r.seo.outdatedYearInMetaDescription !== null },
+
+  // ----- Hreflang declarado en el sitemap -----
+  { id: 'sitemap-hreflang-no-self', severity: 'problem', priority: 'high', category: 'seo',
+    name: 'Sitemap hreflang: Sin auto-referencia',
+    description: 'Entradas del sitemap que declaran alternates pero ninguno apunta a su propia URL. Google exige que cada página de un clúster hreflang se incluya a sí misma; sin eso puede ignorar el clúster entero.',
+    howToFix: 'Añade a la entrada un <xhtml:link rel="alternate"> con el idioma de la propia página y su <loc> como href.',
+    check: hasHreflangIssue('missing-self-reference') },
+  { id: 'sitemap-hreflang-no-return', severity: 'problem', priority: 'high', category: 'seo',
+    name: 'Sitemap hreflang: Falta enlace de vuelta',
+    description: 'La entrada declara un alternate hacia otra URL del sitemap, pero esa URL no declara un hreflang de vuelta. hreflang debe ser bidireccional: si A apunta a B, B tiene que apuntar a A o Google descarta la relación.',
+    howToFix: 'Añade el hreflang recíproco en la entrada de destino. Lo habitual es que todas las URLs del clúster declaren exactamente el mismo bloque de alternates.',
+    check: hasHreflangIssue('missing-return-link') },
+  { id: 'sitemap-hreflang-orphan-target', severity: 'opportunity', priority: 'low', category: 'seo',
+    name: 'Sitemap hreflang: Alternate no verificable',
+    description: 'El alternate apunta a una URL que no está en el sitemap cargado, así que no se pudo comprobar su enlace de vuelta. Suele ser normal: muchos sitios parten los sitemaps por idioma y la contraparte vive en otro archivo. Sólo es un error real si el href está mal escrito o esa URL no está en ningún sitemap.',
+    howToFix: 'Para validar el clúster completo, carga el sitemap index (o el sitemap del otro idioma) en vez de uno solo. Si al hacerlo el aviso persiste, revisa el href o añade esa URL a un sitemap.',
+    check: hasHreflangIssue('alternate-not-in-sitemap') },
+  { id: 'sitemap-hreflang-duplicate', severity: 'problem', priority: 'medium', category: 'seo',
+    name: 'Sitemap hreflang: Idioma duplicado',
+    description: 'La misma clave hreflang aparece dos veces en una entrada apuntando a URLs distintas. Google no puede decidir cuál es la versión de ese idioma y descarta el conflicto.',
+    howToFix: 'Deja un único href por clave de idioma. Si necesitas variantes regionales usa códigos distintos (es, es-MX, es-419).',
+    check: hasHreflangIssue('duplicate-hreflang') },
+  { id: 'sitemap-hreflang-invalid-code', severity: 'warning', priority: 'medium', category: 'seo',
+    name: 'Sitemap hreflang: Código de idioma inválido',
+    description: 'El valor de hreflang no es un código válido. Debe ser ISO 639-1 de idioma, opcionalmente con script y región (es, en-GB, zh-Hant-TW, es-419) o el especial x-default.',
+    howToFix: 'Corrige el código: idioma primero y región después, nunca al revés, y usa el nombre corto ("es", no "espanol"; "en-GB", no "GB-en").',
+    check: hasHreflangIssue('invalid-hreflang-code') },
 
   // ----- Performance -----
   { id: 'slow-ttfb', severity: 'problem', priority: 'high', category: 'performance',

@@ -83,13 +83,21 @@ function seoIssues(r: ScoreInput, ctx: EvalContext): Issue[] {
   else if (s.h1Count > 1) out.push(issue('seo', 'warning', 'h1Count', `Multiple H1 tags (${s.h1Count})`, s.h1Count))
   if (!s.headingHierarchyValid) out.push(issue('seo', 'warning', 'headingHierarchy', 'Heading levels skip (broken hierarchy)'))
 
+  const noindexed = /noindex/i.test(s.metaRobots) || /noindex/i.test(s.xRobotsTag)
   if (/noindex/i.test(s.metaRobots)) out.push(issue('seo', 'critical', 'metaRobots', 'meta robots is noindex', s.metaRobots))
   if (/noindex/i.test(s.xRobotsTag)) out.push(issue('seo', 'critical', 'xRobotsTag', 'X-Robots-Tag is noindex', s.xRobotsTag))
 
+  const canonicalised = s.canonicalStatus === 'other'
   if (s.canonicalStatus === 'missing') out.push(issue('seo', 'warning', 'canonical', 'Missing canonical tag'))
-  else if (s.canonicalStatus === 'other') out.push(issue('seo', 'warning', 'canonical', 'Canonical points to another URL', s.canonicalUrl))
+  else if (canonicalised) out.push(issue('seo', 'warning', 'canonical', 'Canonical points to another URL', s.canonicalUrl))
 
-  if (!s.isIndexable) out.push(issue('seo', 'critical', 'isIndexable', 'Page is not indexable'))
+  // "Not indexable" is a roll-up of noindex / canonicalised / non-200. The
+  // first two already emitted their own issue, so only report the roll-up for
+  // a reason that has not been deducted yet — otherwise one defect costs the
+  // SEO score twice.
+  if (!s.isIndexable && !noindexed && !canonicalised) {
+    out.push(issue('seo', 'critical', 'isIndexable', 'Page is not indexable', r.http.statusCode))
+  }
 
   if (s.urlLength > 115) out.push(issue('seo', 'warning', 'urlLength', `URL very long (${s.urlLength} chars)`, s.urlLength))
   if (s.urlDepth > 4) out.push(issue('seo', 'warning', 'urlDepth', `Deep URL (${s.urlDepth} levels)`, s.urlDepth))
@@ -199,7 +207,8 @@ const CATEGORIES: (keyof CategoryScores)[] = [
   'content',
   'technical',
   'social',
-  'images'
+  'images',
+  'links'
 ]
 
 export function evaluateResult(r: ScoreInput, ctx: EvalContext = EMPTY_CONTEXT): Evaluation {
@@ -215,7 +224,8 @@ export function evaluateResult(r: ScoreInput, ctx: EvalContext = EMPTY_CONTEXT):
       content: 0,
       technical: 0,
       social: 0,
-      images: 0
+      images: 0,
+      links: 0
     }
     return { issues, scores, healthScore: 0, rowStatus: 'error' }
   }
@@ -237,7 +247,8 @@ export function evaluateResult(r: ScoreInput, ctx: EvalContext = EMPTY_CONTEXT):
     content: 100,
     technical: 100,
     social: 100,
-    images: 100
+    images: 100,
+    links: 100
   }
   for (const cat of CATEGORIES) {
     const deductions = issues

@@ -1,7 +1,9 @@
 import { useStore, type TabId } from '../stores/analysisStore'
 import { TAB_LABELS } from '../results/columns'
 
-const BASE_ORDER: TabId[] = [
+// The URL-path tree and the sitemap generator both work off plain results —
+// neither needs link-graph data — so every crawl mode gets them.
+const ORDER: TabId[] = [
   'overview',
   'seo',
   'performance',
@@ -9,14 +11,14 @@ const BASE_ORDER: TabId[] = [
   'technical',
   'social',
   'images',
-  'links'
+  'links',
+  'graph',
+  'sitemap'
 ]
 
 export function CategoryTabs(): JSX.Element {
   const activeTab = useStore((s) => s.activeTab)
   const setTab = useStore((s) => s.setTab)
-  const spiderActive = useStore((s) => s.spiderActive)
-  const ORDER: TabId[] = spiderActive ? [...BASE_ORDER, 'graph', 'sitemap'] : BASE_ORDER
 
   return (
     <div className="flex gap-1 border-b border-slate-200 dark:border-slate-800 px-2 overflow-x-auto">

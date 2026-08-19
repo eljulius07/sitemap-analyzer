@@ -1,3 +1,4 @@
+import { useSpiderStore } from '../../stores/spiderStore'
 import { useTreeStore, type TreeLayout } from '../../stores/treeStore'
 import type { ColorMode } from './treeUtils'
 
@@ -19,6 +20,9 @@ const COLOR_MODES: { id: ColorMode; label: string }[] = [
 
 export function TreeControls(): JSX.Element {
   const t = useTreeStore()
+  // The raw link graph is built from crawled links, which only Spider Mode
+  // collects. Sitemap Mode still gets the URL-path tree, just not this view.
+  const hasLinkGraph = useSpiderStore((s) => s.graph !== null)
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -64,9 +68,11 @@ export function TreeControls(): JSX.Element {
         ))}
       </select>
       <button onClick={t.fit} className="px-2 py-1.5 rounded-md text-xs border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800">Fit</button>
-      <button onClick={() => t.setShowLinkGraph(true)} className="px-2 py-1.5 rounded-md text-xs text-slate-500 hover:underline">
-        Show link graph (advanced)
-      </button>
+      {hasLinkGraph && (
+        <button onClick={() => t.setShowLinkGraph(true)} className="px-2 py-1.5 rounded-md text-xs text-slate-500 hover:underline">
+          Show link graph (advanced)
+        </button>
+      )}
     </div>
   )
 }

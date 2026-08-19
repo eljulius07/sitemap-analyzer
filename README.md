@@ -24,7 +24,7 @@ Built with Electron + React + TypeScript. All crawling runs in the Electron main
 ## Features
 
 ### Two crawl modes
-- **📄 Sitemap Mode** — load a `sitemap.xml` from a local file or a URL. Supports gzip (`.xml.gz`) and recursive **sitemap index** files.
+- **📄 Sitemap Mode** — load a `sitemap.xml` from a local file or a URL. Supports gzip (`.xml.gz`) and recursive **sitemap index** files, reads the per-entry **`<xhtml:link rel="alternate">` hreflang set**, and collapses repeated `<loc>` values.
 - **🕷️ Spider Mode** — discovery crawler that starts from a root URL and follows internal links (BFS) with:
   - configurable **max depth**, **max pages**, **concurrency**, and **timeout**
   - **robots.txt** support (allow/disallow + crawl-delay), follow-subdomains toggle, query-param handling
@@ -35,7 +35,7 @@ Every crawled page is analyzed across seven categories and scored 0–100:
 
 | Category | Examples of what's checked |
 |----------|----------------------------|
-| **SEO** | title / length / pixel width, meta description, H1–H3, heading hierarchy, canonical & indexability, URL hygiene, hreflang |
+| **SEO** | title / length / pixel width, meta description, H1–H3, heading hierarchy, canonical & indexability, URL hygiene, on-page hreflang — plus **validation of the hreflang clusters the sitemap declares**: self-reference, bidirectional return links, alternates missing from the sitemap, duplicate language keys, malformed codes |
 | **Performance** | TTFB, total download, redirect time / count, HTML size, **gzip / brotli / deflate** detection + real decompression, JS / CSS counts, render-blocking resources, lazy-loading, resource hints |
 | **Content** | word count, text/HTML ratio, reading level, paragraphs, media (table / video / audio / iframe), language |
 | **Technical** | HTTPS, **HTTP/2 + HTTP/3 detection via Alt-Svc**, doctype / charset / viewport / favicon, response headers (Server, CSP, HSTS, Cache-Control, ETag…) |
@@ -43,7 +43,7 @@ Every crawled page is analyzed across seven categories and scored 0–100:
 | **Images** | total, missing / empty alt, missing dimensions, next-gen vs legacy formats, lazy-loaded, srcset — plus per-page **on-demand inspector** that returns each image's real weight (KB) and intrinsic dimensions (px) |
 | **Links** | internal / external, nofollow / sponsored / ugc, empty anchors, `#`-only, `javascript:` links |
 
-A **weighted health score** combines them (SEO 35 % · Performance 25 % · Content 15 % · Technical 10 % · Social 10 % · Images 5 %) and each finding becomes a **critical / warning** issue. **Redirects are followed and surfaced** in a dedicated column with the redirect status + final destination, and the tree node is marked.
+A **weighted health score** combines them (SEO 30 % · Performance 25 % · Content 15 % · Technical 10 % · Social 10 % · Images 5 % · Links 5 %) and each finding becomes a **critical / warning** issue. **Redirects are followed and surfaced** in a dedicated column with the redirect status + final destination, and the tree node is marked.
 
 ### Results dashboard
 - **Slim top bar** (frameless, native window controls): logo + nav (Home / Results / Settings) + active crawl context (`🕷️ Spider: domain.com`) + theme toggle + GitHub link.
@@ -63,9 +63,10 @@ A **weighted health score** combines them (SEO 35 % · Performance 25 % · Conte
 - The raw **force-directed link graph** is still available behind a *Show link graph (advanced)* toggle.
 
 ### Sitemap generator
+- **Exclusions applied first**: only 200s get in, and URLs that redirect (3xx — the crawler follows them, so they arrive disguised as 200s), duplicates that resolve to the same destination, and optionally URLs canonicalised elsewhere are all dropped. The preview reports how many each rule removed.
 - Output as **XML**, **XML + sitemap index** (auto-split, zipped), or **TXT**.
 - `<lastmod>` (header / crawl date / custom), `<changefreq>` (auto-by-depth or uniform), `<priority>` (auto-calculated by depth + inbound links, or uniform with pattern overrides).
-- **hreflang** alternates (auto-detected from pages or manual marker mapping with `x-default`).
+- **hreflang** alternates sourced from the page tags, from the original sitemap, or both (page wins per language, sitemap fills the gaps) — or manual marker mapping with `x-default`. Emitted as `<xhtml:link>` (the form Google documents) or as a bare `<link>` to match sitemaps already written that way, preserving any `type` attribute. An alternate is **pruned only when its target was crawled and then excluded**, so a 404 or a redirect never gets advertised while cross-language alternates that live in another sitemap file are left intact.
 - **Image** and **News** sitemap extensions.
 - Manual URL selection, include / exclude glob patterns, gzip output, live **preview + validation**.
 
@@ -133,7 +134,7 @@ Installers are written to `release/`. Packaging is configured in [`electron-buil
    - *Spider Mode*: enter a start URL, tune the crawl settings, then **Start Crawling**.
 2. Watch live progress; **pause/resume/cancel** at any time.
 3. Explore results in the category tabs; click any row to open the full detail panel.
-4. In Spider Mode, open **🗺️ Site Graph** to see the structure and **📝 Generate Sitemap** to export one.
+4. Open **🗺️ Site Graph** for the URL-path tree and **📝 Generate Sitemap** to build a clean one — both available in either mode. The raw link graph behind *Show link graph (advanced)* needs Spider Mode, since only a spider crawl collects link data.
 5. Use the **Export** menu for CSV / XLSX / HTML reports.
 
 Per-crawl settings (concurrency, timeout, user-agent, follow redirects, retry) live on the **Settings** page and persist locally.
@@ -151,7 +152,7 @@ src/
 │   ├── crawler.ts            # sitemap-mode concurrency pool
 │   ├── spider.ts             # spider-mode BFS discovery engine
 │   ├── image-inspector.ts    # per-image weight (Content-Range) + intrinsic dimensions
-│   ├── parser.ts             # sitemap.xml / index / gzip parsing
+│   ├── parser.ts             # sitemap.xml / index / gzip parsing + hreflang alternates
 │   ├── analyzer.ts           # cheerio HTML analysis (7 categories)
 │   ├── url-normalizer.ts     # URL normalization + dedup
 │   └── robots-parser.ts      # robots.txt fetch + rules
@@ -159,7 +160,8 @@ src/
 │   └── index.ts              # contextBridge API (no nodeIntegration)
 ├── shared/
 │   ├── types.ts              # types + IPC channel names shared both ways
-│   └── scoring.ts            # issue generation + category/health scoring
+│   ├── scoring.ts            # issue generation + category/health scoring
+│   └── hreflang.ts           # sitemap hreflang cluster validation
 └── renderer/                 # React UI
     ├── components/           # UI + graph/ (D3 tree) subfolder
     ├── stores/               # zustand: analysis, spider, graph, tree

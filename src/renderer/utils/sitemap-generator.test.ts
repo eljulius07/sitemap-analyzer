@@ -1,0 +1,291 @@
+import { describe, expect, it } from 'vitest'
+import { DEFAULT_SITEMAP_CONFIG, type SitemapConfig, type UrlResult } from '@shared/types'
+import { httpInfo, seoAnalysis, urlResult } from '../../test/fixtures'
+import { generateSitemap, selectEntries } from './sitemap-generator'
+
+const config = (patch: Partial<SitemapConfig> = {}): SitemapConfig => ({
+  ...DEFAULT_SITEMAP_CONFIG,
+  ...patch
+})
+
+const withHreflang = (
+  patch: Partial<SitemapConfig['hreflang']> = {},
+  rest: Partial<SitemapConfig> = {}
+): SitemapConfig =>
+  config({ hreflang: { ...DEFAULT_SITEMAP_CONFIG.hreflang, enabled: true, ...patch }, ...rest })
+
+const ok = (url: string, patch: Partial<UrlResult> = {}): UrlResult => urlResult({ url, ...patch })
+
+const redirecting = (from: string, to: string): UrlResult =>
+  urlResult({
+    url: from,
+    http: httpInfo({
+      statusCode: 200,
+      redirectChain: [
+        { url: from, status: 301 },
+        { url: to, status: 200 }
+      ]
+    })
+  })
+
+const locsIn = (xml: string): string[] =>
+  [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1])
+
+const altsIn = (xml: string): string[] =>
+  [...xml.matchAll(/hreflang="([^"]+)" href="([^"]+)"/g)].map((m) => `${m[1]}=${m[2]}`)
+
+const single = (results: UrlResult[], cfg: SitemapConfig): string =>
+  generateSitemap(results, cfg).files[0].content
+
+describe('excluding broken URLs', () => {
+  it('drops 4xx, 5xx and dead requests', () => {
+    const results = [
+      ok('https://x.com/good'),
+      urlResult({ url: 'https://x.com/gone', http: httpInfo({ statusCode: 404 }) }),
+      urlResult({ url: 'https://x.com/boom', http: httpInfo({ statusCode: 500 }) }),
+      urlResult({
+        url: 'https://x.com/dead',
+        http: httpInfo({ statusCode: null }),
+        error: 'ECONNREFUSED'
+      })
+    ]
+    const { included, stats } = selectEntries(results, config())
+    expect(included.map((r) => r.url)).toEqual(['https://x.com/good'])
+    expect(stats.status).toBe(3)
+  })
+
+  it('drops URLs that redirect, even though the crawl reports them as 200', () => {
+    // Regression: the crawler follows redirects, so a 301 source lands in the
+    // results with statusCode 200 and used to sail straight into the sitemap.
+    const results = [ok('https://x.com/good'), redirecting('https://x.com/old', 'https://x.com/new')]
+    const { included, stats } = selectEntries(results, config())
+    expect(included.map((r) => r.url)).toEqual(['https://x.com/good'])
+    expect(stats.redirected).toBe(1)
+  })
+
+  it('keeps redirecting URLs when the rule is switched off', () => {
+    const results = [redirecting('https://x.com/old', 'https://x.com/new')]
+    expect(selectEntries(results, config({ excludeRedirected: false })).included).toHaveLength(1)
+  })
+
+  it('drops URLs canonicalised elsewhere only when asked', () => {
+    const canonicalised = ok('https://x.com/dup', {
+      seo: seoAnalysis({ canonicalStatus: 'other', canonicalUrl: 'https://x.com/main' })
+    })
+    expect(selectEntries([canonicalised], config()).included).toHaveLength(1)
+    const strict = selectEntries([canonicalised], config({ excludeNonCanonical: true }))
+    expect(strict.included).toHaveLength(0)
+    expect(strict.stats.nonCanonical).toBe(1)
+  })
+})
+
+describe('collapsing duplicates', () => {
+  it('keeps the first of two identical URLs', () => {
+    const { included, stats } = selectEntries([ok('https://x.com/a'), ok('https://x.com/a')], config())
+    expect(included).toHaveLength(1)
+    expect(stats.duplicate).toBe(1)
+  })
+
+  it('collapses URLs that resolve to the same destination', () => {
+    const results = [
+      redirecting('https://x.com/one', 'https://x.com/target'),
+      redirecting('https://x.com/two', 'https://x.com/target')
+    ]
+    const { included, stats } = selectEntries(results, config({ excludeRedirected: false }))
+    expect(included.map((r) => r.url)).toEqual(['https://x.com/one'])
+    expect(stats.duplicate).toBe(1)
+  })
+
+  it('leaves genuinely distinct URLs alone', () => {
+    const { included } = selectEntries([ok('https://x.com/a'), ok('https://x.com/b')], config())
+    expect(included).toHaveLength(2)
+  })
+})
+
+describe('hreflang alternates', () => {
+  const es = ok('https://x.com/es/login', {
+    sitemap: {
+      alternates: [
+        { lang: 'es', href: 'https://x.com/es/login' },
+        { lang: 'en', href: 'https://x.com/en/login' }
+      ],
+      hreflangIssues: []
+    }
+  })
+  const en = ok('https://x.com/en/login', {
+    sitemap: {
+      alternates: [
+        { lang: 'es', href: 'https://x.com/es/login' },
+        { lang: 'en', href: 'https://x.com/en/login' }
+      ],
+      hreflangIssues: []
+    }
+  })
+
+  it('carries the source sitemap alternates into the new one', () => {
+    const xml = single([es, en], withHreflang({ source: 'sitemap' }))
+    expect(altsIn(xml)).toEqual([
+      'es=https://x.com/es/login',
+      'en=https://x.com/en/login',
+      'es=https://x.com/es/login',
+      'en=https://x.com/en/login'
+    ])
+  })
+
+  it('emits nothing when hreflang is off', () => {
+    expect(altsIn(single([es, en], config()))).toEqual([])
+  })
+
+  it('lets the page tags win per language and fills gaps from the sitemap', () => {
+    const page = ok('https://x.com/es/login', {
+      seo: seoAnalysis({ hreflangLinks: [{ lang: 'es', href: 'https://x.com/es/login-v2' }] }),
+      sitemap: {
+        alternates: [
+          { lang: 'es', href: 'https://x.com/es/login' },
+          { lang: 'en', href: 'https://x.com/en/login' }
+        ],
+        hreflangIssues: []
+      }
+    })
+    const cfg = withHreflang({ source: 'both', pruneExcluded: false })
+    expect(altsIn(single([page], cfg))).toEqual([
+      'es=https://x.com/es/login-v2',
+      'en=https://x.com/en/login'
+    ])
+  })
+
+  it('ignores page tags when the source is sitemap-only', () => {
+    const page = ok('https://x.com/es/login', {
+      seo: seoAnalysis({ hreflangLinks: [{ lang: 'fr', href: 'https://x.com/fr/login' }] }),
+      sitemap: {
+        alternates: [{ lang: 'es', href: 'https://x.com/es/login' }],
+        hreflangIssues: []
+      }
+    })
+    expect(altsIn(single([page], withHreflang({ source: 'sitemap' })))).toEqual([
+      'es=https://x.com/es/login'
+    ])
+  })
+
+  it('prunes alternates whose target was excluded', () => {
+    // The English page 404s, so it never reaches the sitemap — and the Spanish
+    // entry must stop advertising it.
+    const broken = urlResult({ url: 'https://x.com/en/login', http: httpInfo({ statusCode: 404 }) })
+    const result = generateSitemap([es, broken], withHreflang({ source: 'sitemap' }))
+    expect(locsIn(result.files[0].content)).toEqual(['https://x.com/es/login'])
+    expect(altsIn(result.files[0].content)).toEqual(['es=https://x.com/es/login'])
+    expect(result.warnings).toContain(
+      '1 hreflang alternate(s) dropped — target is not in the new sitemap.'
+    )
+  })
+
+  it('keeps dangling alternates when pruning is switched off', () => {
+    const broken = urlResult({ url: 'https://x.com/en/login', http: httpInfo({ statusCode: 404 }) })
+    const xml = single([es, broken], withHreflang({ source: 'sitemap', pruneExcluded: false }))
+    expect(altsIn(xml)).toEqual(['es=https://x.com/es/login', 'en=https://x.com/en/login'])
+  })
+})
+
+describe('warnings', () => {
+  it('reports what each exclusion rule removed', () => {
+    const results = [
+      ok('https://x.com/good'),
+      urlResult({ url: 'https://x.com/gone', http: httpInfo({ statusCode: 404 }) }),
+      redirecting('https://x.com/old', 'https://x.com/new'),
+      ok('https://x.com/good')
+    ]
+    const { warnings } = generateSitemap(results, config())
+    expect(warnings).toContain('1 URL(s) excluded — error or non-allowed status.')
+    expect(warnings).toContain('1 URL(s) excluded — they redirect elsewhere.')
+    expect(warnings).toContain('1 duplicate URL(s) collapsed to one entry.')
+  })
+})
+
+describe('depth without a spider crawl', () => {
+  it('falls back to URL path depth for auto priority', () => {
+    // Sitemap Mode has no link graph, so every URL used to score as depth 0
+    // and land on priority 1.0.
+    const shallow = ok('https://x.com/a', { seo: seoAnalysis({ urlDepth: 1 }) })
+    const deep = ok('https://x.com/a/b/c/d', { seo: seoAnalysis({ urlDepth: 4 }) })
+    const xml = single([shallow, deep], config({ priority: 'auto-calculate' }))
+    expect([...xml.matchAll(/<priority>([^<]+)<\/priority>/g)].map((m) => m[1])).toEqual([
+      '0.8', // 1.0 - 1*0.15, rounded
+      '0.4' //  1.0 - 4*0.15
+    ])
+  })
+})
+
+describe('a language-split sitemap', () => {
+  // The Spanish sitemap lists only /es/ URLs; the English counterparts live in
+  // their own file and are never crawled. Their alternates must survive.
+  const esPage = (path: string, enPath: string): UrlResult =>
+    ok(`https://www.pricetravel.com${path}`, {
+      sitemap: {
+        alternates: [
+          { lang: 'es', href: `https://www.pricetravel.com${path}` },
+          { lang: 'en', href: `https://www.pricetravel.com${enPath}`, type: 'text/html' }
+        ],
+        hreflangIssues: []
+      }
+    })
+
+  const results = [esPage('/es/hoteles', '/en/hotels'), esPage('/es/vuelos', '/en/flights')]
+
+  it('keeps alternates whose target was never crawled', () => {
+    // Regression: pruning used to require the target to be among the included
+    // results, which wiped out every cross-language alternate.
+    const out = generateSitemap(results, withHreflang({ source: 'sitemap' }))
+    expect(altsIn(out.files[0].content)).toEqual([
+      'es=https://www.pricetravel.com/es/hoteles',
+      'en=https://www.pricetravel.com/en/hotels',
+      'es=https://www.pricetravel.com/es/vuelos',
+      'en=https://www.pricetravel.com/en/flights'
+    ])
+    expect(out.warnings).not.toContain(
+      '1 hreflang alternate(s) dropped — target is not in the new sitemap.'
+    )
+  })
+
+  it('still prunes a target that was crawled and turned out broken', () => {
+    const broken = urlResult({
+      url: 'https://www.pricetravel.com/en/hotels',
+      http: httpInfo({ statusCode: 404 })
+    })
+    const xml = single([...results, broken], withHreflang({ source: 'sitemap' }))
+    expect(altsIn(xml)).not.toContain('en=https://www.pricetravel.com/en/hotels')
+    expect(altsIn(xml)).toContain('en=https://www.pricetravel.com/en/flights')
+  })
+})
+
+describe('alternate output format', () => {
+  const page = ok('https://x.com/es/a', {
+    sitemap: {
+      alternates: [
+        { lang: 'es', href: 'https://x.com/es/a' },
+        { lang: 'en', href: 'https://x.com/en/a', type: 'text/html' }
+      ],
+      hreflangIssues: []
+    }
+  })
+
+  it('emits the namespaced form Google documents by default', () => {
+    const xml = single([page], withHreflang({ source: 'sitemap' }))
+    expect(xml).toContain('xmlns:xhtml="http://www.w3.org/1999/xhtml"')
+    expect(xml).toContain(
+      '<xhtml:link rel="alternate" hreflang="es" href="https://x.com/es/a"/>'
+    )
+  })
+
+  it('can mirror a bare <link> sitemap, namespace and all', () => {
+    const xml = single([page], withHreflang({ source: 'sitemap', linkStyle: 'plain' }))
+    expect(xml).not.toContain('xmlns:xhtml')
+    expect(xml).toContain('<link rel="alternate" hreflang="es" href="https://x.com/es/a"/>')
+  })
+
+  it('carries the type attribute through when the source had one', () => {
+    const xml = single([page], withHreflang({ source: 'sitemap', linkStyle: 'plain' }))
+    expect(xml).toContain(
+      '<link rel="alternate" type="text/html" hreflang="en" href="https://x.com/en/a"/>'
+    )
+  })
+})

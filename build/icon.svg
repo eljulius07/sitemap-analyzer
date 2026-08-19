@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e293b"/>
+      <stop offset="1" stop-color="#0b1220"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3b82f6" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#3b82f6" stop-opacity="0.10"/>
+    </linearGradient>
+  </defs>
+
+  <!-- macOS-proportioned plate: 824x824 content box inside a 1024 canvas -->
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="url(#plate)"/>
+  <rect x="104" y="104" width="816" height="816" rx="181" ry="181" fill="none" stroke="url(#edge)" stroke-width="8"/>
+
+  <!-- Crawl tree: a root fanning out into pages, colour-coded by health -->
+  <g stroke="#4b5b70" stroke-width="24" stroke-linecap="round" fill="none">
+    <path d="M512 336 L392 512"/>
+    <path d="M512 336 L632 512"/>
+    <path d="M392 512 L332 692"/>
+    <path d="M392 512 L452 692"/>
+    <path d="M632 512 L572 692"/>
+    <path d="M632 512 L692 692"/>
+  </g>
+
+  <circle cx="512" cy="336" r="72" fill="#3b82f6"/>
+  <circle cx="512" cy="336" r="72" fill="none" stroke="#93c5fd" stroke-width="10"/>
+
+  <circle cx="392" cy="512" r="54" fill="#60a5fa"/>
+  <circle cx="632" cy="512" r="54" fill="#60a5fa"/>
+
+  <circle cx="332" cy="692" r="44" fill="#10b981"/>
+  <circle cx="452" cy="692" r="44" fill="#10b981"/>
+  <circle cx="572" cy="692" r="44" fill="#f59e0b"/>
+  <circle cx="692" cy="692" r="44" fill="#ef4444"/>
+</svg>

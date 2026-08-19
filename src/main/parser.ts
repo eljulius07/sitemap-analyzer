@@ -2,15 +2,26 @@ import { gunzipSync } from 'node:zlib'
 import { readFile } from 'node:fs/promises'
 import axios from 'axios'
 import { XMLParser } from 'fast-xml-parser'
-import type { CrawlSettings, ParseSitemapResult } from '@shared/types'
+import type {
+  CrawlSettings,
+  ParseSitemapResult,
+  SitemapAlternate,
+  SitemapUrlEntry
+} from '@shared/types'
 
 const MAX_NESTED_SITEMAPS = 50
+
+/**
+ * Element names that carry hreflang alternates inside a `<url>`. The protocol
+ * spells it `xhtml:link`, but plenty of real sitemaps emit a bare `link`.
+ */
+const ALTERNATE_KEYS = ['xhtml:link', 'link'] as const
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
   trimValues: true,
-  isArray: (name) => name === 'url' || name === 'sitemap'
+  isArray: (name) => name === 'url' || name === 'sitemap' || name === 'xhtml:link' || name === 'link'
 })
 
 /** Coerce fast-xml-parser output into an array regardless of single/multi. */
@@ -30,26 +41,59 @@ function decode(buf: Buffer, url?: string): string {
   return data.toString('utf-8')
 }
 
+interface AlternateNode {
+  '@_rel'?: string
+  '@_hreflang'?: string
+  '@_href'?: string
+  '@_type'?: string
+}
 interface UrlEntry {
   loc?: string
+  'xhtml:link'?: AlternateNode[]
+  link?: AlternateNode[]
 }
 interface SitemapEntry {
   loc?: string
 }
 
 /**
- * Parse a single sitemap document. Returns either page URLs (urlset) or
+ * Collect the hreflang alternates declared inside one `<url>`. A link with no
+ * `rel` is accepted (some generators omit it); anything with a different `rel`
+ * — stylesheet, canonical — is skipped.
+ */
+function readAlternates(entry: UrlEntry): SitemapAlternate[] {
+  const out: SitemapAlternate[] = []
+  const seen = new Set<string>()
+  for (const key of ALTERNATE_KEYS) {
+    for (const node of toArray<AlternateNode>(entry[key])) {
+      const rel = node?.['@_rel']?.trim().toLowerCase()
+      if (rel && rel !== 'alternate') continue
+      const lang = node?.['@_hreflang']?.trim() ?? ''
+      const href = node?.['@_href']?.trim() ?? ''
+      if (!lang || !href) continue
+      const dedupe = `${lang}\u0000${href}`
+      if (seen.has(dedupe)) continue
+      seen.add(dedupe)
+      const type = node?.['@_type']?.trim()
+      out.push(type ? { lang, href, type } : { lang, href })
+    }
+  }
+  return out
+}
+
+/**
+ * Parse a single sitemap document. Returns either page entries (urlset) or
  * nested sitemap locations (sitemapindex).
  */
-function parseDocument(xml: string): { urls: string[]; nested: string[] } {
+function parseDocument(xml: string): { entries: SitemapUrlEntry[]; nested: string[] } {
   const parsed = xmlParser.parse(xml)
-  const urls: string[] = []
+  const entries: SitemapUrlEntry[] = []
   const nested: string[] = []
 
   if (parsed?.urlset) {
     for (const entry of toArray<UrlEntry>(parsed.urlset.url)) {
       const loc = typeof entry?.loc === 'string' ? entry.loc.trim() : ''
-      if (loc) urls.push(loc)
+      if (loc) entries.push({ loc, alternates: readAlternates(entry) })
     }
   }
 
@@ -60,7 +104,46 @@ function parseDocument(xml: string): { urls: string[]; nested: string[] } {
     }
   }
 
-  return { urls, nested }
+  return { entries, nested }
+}
+
+interface Collector {
+  /** Unique entries keyed by `<loc>`, in first-seen order. */
+  byLoc: Map<string, SitemapUrlEntry>
+  /** How many `<loc>` values were seen more than once. */
+  duplicates: number
+}
+
+/** Merge a document's entries into the collector, folding duplicate locs. */
+function collect(target: Collector, entries: SitemapUrlEntry[]): void {
+  for (const entry of entries) {
+    const existing = target.byLoc.get(entry.loc)
+    if (!existing) {
+      target.byLoc.set(entry.loc, entry)
+      continue
+    }
+    target.duplicates++
+    // Keep the first entry, but absorb alternates only the duplicate declared.
+    for (const alt of entry.alternates) {
+      if (!existing.alternates.some((a) => a.lang === alt.lang && a.href === alt.href)) {
+        existing.alternates.push(alt)
+      }
+    }
+  }
+}
+
+function emptyResult(error: string): ParseSitemapResult {
+  return { urls: [], sitemapCount: 0, entries: [], duplicateLocs: 0, error }
+}
+
+function finish(target: Collector, sitemapCount: number): ParseSitemapResult {
+  const entries = [...target.byLoc.values()]
+  return {
+    urls: entries.map((e) => e.loc),
+    sitemapCount,
+    entries,
+    duplicateLocs: target.duplicates
+  }
 }
 
 function isValidXml(xml: string): boolean {
@@ -91,7 +174,7 @@ async function resolveRemote(
   url: string,
   settings: CrawlSettings,
   seen: Set<string>,
-  collected: Set<string>,
+  collected: Collector,
   counter: { sitemaps: number }
 ): Promise<void> {
   if (seen.has(url) || counter.sitemaps >= MAX_NESTED_SITEMAPS) return
@@ -102,8 +185,8 @@ async function resolveRemote(
   const xml = decode(buf, url)
   if (!isValidXml(xml)) throw new Error(`Invalid sitemap XML at ${url}`)
 
-  const { urls, nested } = parseDocument(xml)
-  for (const u of urls) collected.add(u)
+  const { entries, nested } = parseDocument(xml)
+  collect(collected, entries)
   for (const child of nested) {
     await resolveRemote(child, settings, seen, collected, counter)
   }
@@ -115,16 +198,12 @@ export async function parseSitemapFromUrl(
 ): Promise<ParseSitemapResult> {
   try {
     const seen = new Set<string>()
-    const collected = new Set<string>()
+    const collected: Collector = { byLoc: new Map(), duplicates: 0 }
     const counter = { sitemaps: 0 }
     await resolveRemote(url, settings, seen, collected, counter)
-    return { urls: [...collected], sitemapCount: counter.sitemaps }
+    return finish(collected, counter.sitemaps)
   } catch (err) {
-    return {
-      urls: [],
-      sitemapCount: 0,
-      error: err instanceof Error ? err.message : String(err)
-    }
+    return emptyResult(err instanceof Error ? err.message : String(err))
   }
 }
 
@@ -139,12 +218,11 @@ export async function parseSitemapFromFile(
   try {
     const buf = await readFile(filePath)
     const xml = decode(buf, filePath)
-    if (!isValidXml(xml)) {
-      return { urls: [], sitemapCount: 0, error: 'File is not a valid XML sitemap.' }
-    }
+    if (!isValidXml(xml)) return emptyResult('File is not a valid XML sitemap.')
 
-    const { urls, nested } = parseDocument(xml)
-    const collected = new Set<string>(urls)
+    const { entries, nested } = parseDocument(xml)
+    const collected: Collector = { byLoc: new Map(), duplicates: 0 }
+    collect(collected, entries)
     const counter = { sitemaps: 1 }
 
     if (nested.length > 0) {
@@ -154,12 +232,8 @@ export async function parseSitemapFromFile(
       }
     }
 
-    return { urls: [...collected], sitemapCount: counter.sitemaps }
+    return finish(collected, counter.sitemaps)
   } catch (err) {
-    return {
-      urls: [],
-      sitemapCount: 0,
-      error: err instanceof Error ? err.message : String(err)
-    }
+    return emptyResult(err instanceof Error ? err.message : String(err))
   }
 }
