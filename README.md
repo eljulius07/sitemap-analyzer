@@ -134,7 +134,7 @@ Installers are written to `release/`. Packaging is configured in [`electron-buil
    - *Spider Mode*: enter a start URL, tune the crawl settings, then **Start Crawling**.
 2. Watch live progress; **pause/resume/cancel** at any time.
 3. Explore results in the category tabs; click any row to open the full detail panel.
-4. In Spider Mode, open **🗺️ Site Graph** to see the structure and **📝 Generate Sitemap** to export one.
+4. Open **🗺️ Site Graph** for the URL-path tree and **📝 Generate Sitemap** to build a clean one — both available in either mode. The raw link graph behind *Show link graph (advanced)* needs Spider Mode, since only a spider crawl collects link data.
 5. Use the **Export** menu for CSV / XLSX / HTML reports.
 
 Per-crawl settings (concurrency, timeout, user-agent, follow redirects, retry) live on the **Settings** page and persist locally.

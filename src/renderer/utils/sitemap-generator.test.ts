@@ -200,3 +200,17 @@ describe('warnings', () => {
     expect(warnings).toContain('1 duplicate URL(s) collapsed to one entry.')
   })
 })
+
+describe('depth without a spider crawl', () => {
+  it('falls back to URL path depth for auto priority', () => {
+    // Sitemap Mode has no link graph, so every URL used to score as depth 0
+    // and land on priority 1.0.
+    const shallow = ok('https://x.com/a', { seo: seoAnalysis({ urlDepth: 1 }) })
+    const deep = ok('https://x.com/a/b/c/d', { seo: seoAnalysis({ urlDepth: 4 }) })
+    const xml = single([shallow, deep], config({ priority: 'auto-calculate' }))
+    expect([...xml.matchAll(/<priority>([^<]+)<\/priority>/g)].map((m) => m[1])).toEqual([
+      '0.8', // 1.0 - 1*0.15, rounded
+      '0.4' //  1.0 - 4*0.15
+    ])
+  })
+})

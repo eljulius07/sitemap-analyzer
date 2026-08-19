@@ -73,10 +73,19 @@ function computeLastmod(r: UrlResult, config: SitemapConfig): string | null {
   }
 }
 
+/**
+ * Depth used for auto priority / changefreq. Spider Mode measures it from the
+ * link graph; in Sitemap Mode there is no graph, so fall back to how deep the
+ * URL path itself sits — otherwise every URL would score as depth 0.
+ */
+function depthOf(r: UrlResult): number {
+  return r.spider?.depth ?? r.seo?.urlDepth ?? 0
+}
+
 function computeChangefreq(r: UrlResult, config: SitemapConfig): ChangefreqValue | null {
   if (config.changefreq === 'none') return null
   if (config.changefreq === 'uniform') return config.uniformChangefreq
-  const depth = r.spider?.depth ?? 0
+  const depth = depthOf(r)
   const map = config.depthChangefreqMap
   if (map[depth] !== undefined) return map[depth]
   const keys = Object.keys(map)
@@ -93,7 +102,7 @@ function computePriority(r: UrlResult, config: SitemapConfig): string | null {
   for (const ov of config.priorityOverrides) {
     if (globMatch(path, ov.pattern)) return Math.max(0, Math.min(1, ov.priority)).toFixed(1)
   }
-  const depth = r.spider?.depth ?? 0
+  const depth = depthOf(r)
   const inbound = r.spider?.inboundInternal ?? 0
   let p = 1.0 - depth * 0.15
   p += Math.floor(inbound / 10) * 0.1
