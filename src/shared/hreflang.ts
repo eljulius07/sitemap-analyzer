@@ -33,8 +33,11 @@ export function alternateKey(url: string): string {
  *  - the language code is well formed;
  *  - no language is declared twice pointing at different URLs;
  *  - the set includes a self-reference (Google requires it);
- *  - every alternate is itself listed in the sitemap;
- *  - every alternate links back (hreflang must be bidirectional).
+ *  - every alternate is itself listed in the sitemap — a soft finding, since
+ *    sites routinely split their sitemaps by language and the counterpart then
+ *    legitimately lives in another file;
+ *  - every alternate links back (hreflang must be bidirectional), checked only
+ *    for targets we can actually see.
  */
 export function validateSitemapHreflang(
   entries: SitemapUrlEntry[]
@@ -88,7 +91,7 @@ export function validateSitemapHreflang(
             code: 'alternate-not-in-sitemap',
             lang: alt.lang,
             href: alt.href,
-            message: `Alternate "${alt.href}" is not listed in the sitemap`
+            message: `Alternate "${alt.href}" is not in the loaded sitemap — return link unverified`
           })
         } else if (altKey !== selfKey && !targetsOf.get(altKey)?.has(selfKey)) {
           issues.push({

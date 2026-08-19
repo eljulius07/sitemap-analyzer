@@ -33,7 +33,7 @@ describe('sitemap alternates', () => {
     expect(res.urls).toEqual(['https://www.pricetravel.com/es/login'])
     expect(res.entries[0].alternates).toEqual([
       { lang: 'es', href: 'https://www.pricetravel.com/es/login' },
-      { lang: 'en', href: 'https://www.pricetravel.com/en/login' }
+      { lang: 'en', href: 'https://www.pricetravel.com/en/login', type: 'text/html' }
     ])
   })
 
@@ -82,6 +82,43 @@ describe('sitemap alternates', () => {
   it('leaves entries without alternates with an empty list', async () => {
     const res = await parse(wrap('<url><loc>https://x.com/plain</loc></url>'))
     expect(res.entries).toEqual([{ loc: 'https://x.com/plain', alternates: [] }])
+  })
+})
+
+describe('a real-world sitemap that omits the xhtml namespace', () => {
+  // Shape taken from a production sitemap: no xmlns:xhtml on the urlset, bare
+  // <link> elements, and a type attribute on some of them.
+  const REAL = `<?xml version="1.0" encoding="utf-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.pricetravel.com/es/hoteles</loc>
+    <link rel="alternate" hreflang="es" href="https://www.pricetravel.com/es/hoteles" />
+    <link rel="alternate" type="text/html" hreflang="en" href="https://www.pricetravel.com/en/hotels" />
+  </url>
+  <url>
+    <loc>https://www.pricetravel.com/es/vuelos</loc>
+    <link rel="alternate" hreflang="es" href="https://www.pricetravel.com/es/vuelos" />
+    <link rel="alternate" type="text/html" hreflang="en" href="https://www.pricetravel.com/en/flights" />
+  </url>
+</urlset>`
+
+  it('reads every entry with its alternates', async () => {
+    const res = await parse(REAL)
+    expect(res.error).toBeUndefined()
+    expect(res.urls).toHaveLength(2)
+    expect(res.entries[0].alternates).toHaveLength(2)
+    expect(res.entries[1].alternates.map((a) => a.href)).toEqual([
+      'https://www.pricetravel.com/es/vuelos',
+      'https://www.pricetravel.com/en/flights'
+    ])
+  })
+
+  it('preserves the type attribute so a regenerated file can match', async () => {
+    const res = await parse(REAL)
+    expect(res.entries[0].alternates).toEqual([
+      { lang: 'es', href: 'https://www.pricetravel.com/es/hoteles' },
+      { lang: 'en', href: 'https://www.pricetravel.com/en/hotels', type: 'text/html' }
+    ])
   })
 })
 

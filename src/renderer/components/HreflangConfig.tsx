@@ -75,10 +75,37 @@ export function HreflangConfig({
                   checked={value.pruneExcluded}
                   onChange={(e) => update({ pruneExcluded: e.target.checked })}
                 />
-                Drop alternates whose target was excluded
+                Drop alternates whose target was crawled and excluded
               </label>
             </div>
           )}
+
+          <div className="space-y-1 border-t border-slate-200 pt-3 dark:border-slate-700">
+            <div className="text-sm font-medium">Output format</div>
+            <div className="flex flex-wrap gap-4 text-sm">
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  checked={value.linkStyle === 'xhtml'}
+                  onChange={() => update({ linkStyle: 'xhtml' })}
+                />
+                &lt;xhtml:link&gt;
+              </label>
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  checked={value.linkStyle === 'plain'}
+                  onChange={() => update({ linkStyle: 'plain' })}
+                />
+                &lt;link&gt;
+              </label>
+            </div>
+            <div className="text-xs text-slate-500">
+              {value.linkStyle === 'xhtml'
+                ? 'The form Google documents, with xmlns:xhtml declared on the urlset.'
+                : 'Bare <link>, no namespace — matches sitemaps already written this way. Widely accepted in practice, but it is not valid against the sitemap schema.'}
+            </div>
+          </div>
 
           {value.mode === 'manual-mapping' && (
             <div className="space-y-2">

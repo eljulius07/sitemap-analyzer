@@ -214,3 +214,78 @@ describe('depth without a spider crawl', () => {
     ])
   })
 })
+
+describe('a language-split sitemap', () => {
+  // The Spanish sitemap lists only /es/ URLs; the English counterparts live in
+  // their own file and are never crawled. Their alternates must survive.
+  const esPage = (path: string, enPath: string): UrlResult =>
+    ok(`https://www.pricetravel.com${path}`, {
+      sitemap: {
+        alternates: [
+          { lang: 'es', href: `https://www.pricetravel.com${path}` },
+          { lang: 'en', href: `https://www.pricetravel.com${enPath}`, type: 'text/html' }
+        ],
+        hreflangIssues: []
+      }
+    })
+
+  const results = [esPage('/es/hoteles', '/en/hotels'), esPage('/es/vuelos', '/en/flights')]
+
+  it('keeps alternates whose target was never crawled', () => {
+    // Regression: pruning used to require the target to be among the included
+    // results, which wiped out every cross-language alternate.
+    const out = generateSitemap(results, withHreflang({ source: 'sitemap' }))
+    expect(altsIn(out.files[0].content)).toEqual([
+      'es=https://www.pricetravel.com/es/hoteles',
+      'en=https://www.pricetravel.com/en/hotels',
+      'es=https://www.pricetravel.com/es/vuelos',
+      'en=https://www.pricetravel.com/en/flights'
+    ])
+    expect(out.warnings).not.toContain(
+      '1 hreflang alternate(s) dropped — target is not in the new sitemap.'
+    )
+  })
+
+  it('still prunes a target that was crawled and turned out broken', () => {
+    const broken = urlResult({
+      url: 'https://www.pricetravel.com/en/hotels',
+      http: httpInfo({ statusCode: 404 })
+    })
+    const xml = single([...results, broken], withHreflang({ source: 'sitemap' }))
+    expect(altsIn(xml)).not.toContain('en=https://www.pricetravel.com/en/hotels')
+    expect(altsIn(xml)).toContain('en=https://www.pricetravel.com/en/flights')
+  })
+})
+
+describe('alternate output format', () => {
+  const page = ok('https://x.com/es/a', {
+    sitemap: {
+      alternates: [
+        { lang: 'es', href: 'https://x.com/es/a' },
+        { lang: 'en', href: 'https://x.com/en/a', type: 'text/html' }
+      ],
+      hreflangIssues: []
+    }
+  })
+
+  it('emits the namespaced form Google documents by default', () => {
+    const xml = single([page], withHreflang({ source: 'sitemap' }))
+    expect(xml).toContain('xmlns:xhtml="http://www.w3.org/1999/xhtml"')
+    expect(xml).toContain(
+      '<xhtml:link rel="alternate" hreflang="es" href="https://x.com/es/a"/>'
+    )
+  })
+
+  it('can mirror a bare <link> sitemap, namespace and all', () => {
+    const xml = single([page], withHreflang({ source: 'sitemap', linkStyle: 'plain' }))
+    expect(xml).not.toContain('xmlns:xhtml')
+    expect(xml).toContain('<link rel="alternate" hreflang="es" href="https://x.com/es/a"/>')
+  })
+
+  it('carries the type attribute through when the source had one', () => {
+    const xml = single([page], withHreflang({ source: 'sitemap', linkStyle: 'plain' }))
+    expect(xml).toContain(
+      '<link rel="alternate" type="text/html" hreflang="en" href="https://x.com/en/a"/>'
+    )
+  })
+})

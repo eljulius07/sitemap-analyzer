@@ -225,25 +225,34 @@ export function selectEntries(
 type AlternateMap = Map<string, SitemapAlternate[]>
 
 /**
- * Resolve the alternates every included URL will advertise, dropping any whose
- * target was excluded — otherwise the fresh sitemap would point hreflang at the
- * very 404s and redirects we just filtered out.
+ * Resolve the alternates every included URL will advertise.
+ *
+ * Pruning drops an alternate only when its target was crawled and then
+ * excluded — a 404, a redirect, a duplicate — so the fresh sitemap never
+ * points hreflang at something we just filtered out. A target that was never
+ * crawled is left alone: sites routinely split sitemaps by language, so the
+ * English alternates of a Spanish sitemap are simply out of scope, not broken,
+ * and silently deleting them would throw away the whole hreflang cluster.
  */
 function resolveAlternates(
+  results: UrlResult[],
   included: UrlResult[],
   config: SitemapConfig
 ): { byUrl: AlternateMap; pruned: number } {
   const byUrl: AlternateMap = new Map()
   if (!config.hreflang.enabled) return { byUrl, pruned: 0 }
 
+  const crawled = new Set(results.map((r) => alternateKey(r.url)))
   const survivors = new Set(included.map((r) => alternateKey(r.url)))
-  let pruned = 0
+  const isKnownBad = (href: string): boolean => {
+    const key = alternateKey(href)
+    return crawled.has(key) && !survivors.has(key)
+  }
 
+  let pruned = 0
   for (const r of included) {
     const all = hreflangAlternates(r, config)
-    const kept = config.hreflang.pruneExcluded
-      ? all.filter((a) => survivors.has(alternateKey(a.href)))
-      : all
+    const kept = config.hreflang.pruneExcluded ? all.filter((a) => !isKnownBad(a.href)) : all
     pruned += all.length - kept.length
     if (kept.length > 0) byUrl.set(r.url, kept)
   }
@@ -260,9 +269,11 @@ function buildUrlEntry(r: UrlResult, config: SitemapConfig, alternates: Alternat
   const pr = computePriority(r, config)
   if (pr) parts.push(`    <priority>${pr}</priority>`)
 
+  const tag = config.hreflang.linkStyle === 'plain' ? 'link' : 'xhtml:link'
   for (const alt of alternates.get(r.url) ?? []) {
+    const type = alt.type ? ` type="${xmlEscape(alt.type)}"` : ''
     parts.push(
-      `    <xhtml:link rel="alternate" hreflang="${xmlEscape(alt.lang)}" href="${xmlEscape(alt.href)}"/>`
+      `    <${tag} rel="alternate"${type} hreflang="${xmlEscape(alt.lang)}" href="${xmlEscape(alt.href)}"/>`
     )
   }
 
@@ -287,7 +298,10 @@ function buildUrlEntry(r: UrlResult, config: SitemapConfig, alternates: Alternat
 
 function namespaces(config: SitemapConfig): string {
   const ns = ['xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"']
-  if (config.hreflang.enabled) ns.push('xmlns:xhtml="http://www.w3.org/1999/xhtml"')
+  // A plain <link> lives in the sitemap namespace, so it declares nothing.
+  if (config.hreflang.enabled && config.hreflang.linkStyle === 'xhtml') {
+    ns.push('xmlns:xhtml="http://www.w3.org/1999/xhtml"')
+  }
   if (config.imageSitemap.enabled) ns.push('xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"')
   if (config.videoSitemap.enabled) ns.push('xmlns:video="http://www.google.com/schemas/sitemap-video/1.1"')
   if (config.newsSitemap.enabled) ns.push('xmlns:news="http://www.google.com/schemas/sitemap-news/0.9"')
@@ -312,7 +326,7 @@ function buildIndexFile(fileNames: string[], origin: string): string {
 
 export function generateSitemap(results: UrlResult[], config: SitemapConfig): SitemapResult {
   const { included: eligible, stats } = selectEntries(results, config)
-  const { byUrl: alternates, pruned } = resolveAlternates(eligible, config)
+  const { byUrl: alternates, pruned } = resolveAlternates(results, eligible, config)
 
   const warnings: string[] = []
   if (eligible.length === 0) warnings.push('No URLs match the current selection.')

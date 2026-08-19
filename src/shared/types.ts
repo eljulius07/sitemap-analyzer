@@ -310,6 +310,8 @@ export interface AnalyzeProgress {
 export interface SitemapAlternate {
   lang: string
   href: string
+  /** Optional `type` attribute, preserved so a regenerated file matches. */
+  type?: string
 }
 
 /** A `<url>` entry exactly as declared in the source sitemap. */
@@ -521,8 +523,20 @@ export interface SitemapConfig {
      * them with the page winning per language code.
      */
     source: 'page' | 'sitemap' | 'both'
-    /** Drop alternates whose target did not make it into the new sitemap. */
+    /**
+     * Drop alternates whose target was crawled and then excluded (a 404, a
+     * redirect, a duplicate). Targets that were never crawled at all — the
+     * usual case when a site splits its sitemaps by language — are left
+     * alone, since there is no evidence against them.
+     */
     pruneExcluded: boolean
+    /**
+     * How to write the alternate elements. `xhtml` is the form Google
+     * documents, `<xhtml:link>` with the namespace declared. `plain` emits a
+     * bare `<link>` and no namespace, matching sitemaps that were generated
+     * that way — accepted in practice but not schema-valid.
+     */
+    linkStyle: 'xhtml' | 'plain'
     mappings: { lang: string; pattern: string; replacement: string }[]
     xDefault: string
   }
@@ -564,6 +578,7 @@ export const DEFAULT_SITEMAP_CONFIG: SitemapConfig = {
     mode: 'auto-detect',
     source: 'both',
     pruneExcluded: true,
+    linkStyle: 'xhtml',
     mappings: [],
     xDefault: ''
   },

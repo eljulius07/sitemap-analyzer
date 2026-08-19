@@ -45,6 +45,7 @@ interface AlternateNode {
   '@_rel'?: string
   '@_hreflang'?: string
   '@_href'?: string
+  '@_type'?: string
 }
 interface UrlEntry {
   loc?: string
@@ -73,7 +74,8 @@ function readAlternates(entry: UrlEntry): SitemapAlternate[] {
       const dedupe = `${lang}\u0000${href}`
       if (seen.has(dedupe)) continue
       seen.add(dedupe)
-      out.push({ lang, href })
+      const type = node?.['@_type']?.trim()
+      out.push(type ? { lang, href, type } : { lang, href })
     }
   }
   return out

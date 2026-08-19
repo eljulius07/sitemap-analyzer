@@ -66,7 +66,7 @@ A **weighted health score** combines them (SEO 30 % · Performance 25 % · Conte
 - **Exclusions applied first**: only 200s get in, and URLs that redirect (3xx — the crawler follows them, so they arrive disguised as 200s), duplicates that resolve to the same destination, and optionally URLs canonicalised elsewhere are all dropped. The preview reports how many each rule removed.
 - Output as **XML**, **XML + sitemap index** (auto-split, zipped), or **TXT**.
 - `<lastmod>` (header / crawl date / custom), `<changefreq>` (auto-by-depth or uniform), `<priority>` (auto-calculated by depth + inbound links, or uniform with pattern overrides).
-- **hreflang** alternates sourced from the page tags, from the original sitemap, or both (page wins per language, sitemap fills the gaps) — or manual marker mapping with `x-default`. Alternates pointing at a URL that got excluded are **pruned**, so the fresh sitemap never advertises hreflang to a 404 or a redirect.
+- **hreflang** alternates sourced from the page tags, from the original sitemap, or both (page wins per language, sitemap fills the gaps) — or manual marker mapping with `x-default`. Emitted as `<xhtml:link>` (the form Google documents) or as a bare `<link>` to match sitemaps already written that way, preserving any `type` attribute. An alternate is **pruned only when its target was crawled and then excluded**, so a 404 or a redirect never gets advertised while cross-language alternates that live in another sitemap file are left intact.
 - **Image** and **News** sitemap extensions.
 - Manual URL selection, include / exclude glob patterns, gzip output, live **preview + validation**.
 
